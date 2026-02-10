@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vocabulary Learner</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // Expand compressed word format to full structure
+    function expandWord(raw) {
+      return {
+        word: raw.w,
+        pronunciation: raw.p,
+        difficulty: raw.d,
+        koreanMeaning: raw.k,
+        category: raw.c,
+        synonyms: raw.s,
+        antonyms: raw.a,
+        examples: raw.ex.map(e => ({ en: e.en, ko: e.ko, usage: e.usage }))
+      };
+    }
+
+    const STORAGE_KEY = 'vocab-studied';
+    const DAILY_BATCHES_KEY = 'vocab-daily-batches';
+    const WORDS_PER_DAY = 15;
+
+    function getTodayKey() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function getStudied() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      } catch {
+        return {};
+      }
+    }
+
+    function getDailyBatches() {
+      try {
+        return JSON.parse(localStorage.getItem(DAILY_BATCHES_KEY) || '{}');
+      } catch {
+        return {};
+      }
+    }
+
+    function getTodayBatch(bookId) {
+      const batches = getDailyBatches();
+      const day = getTodayKey();
+      if (!batches[bookId] || !batches[bookId][day]) return [];
+      return batches[bookId][day];
+    }
+
+    function saveTodayBatch(bookId, wordList) {
+      const batches = getDailyBatches();
+      if (!batches[bookId]) batches[bookId] = {};
+      batches[bookId][getTodayKey()] = wordList;
+      localStorage.setItem(DAILY_BATCHES_KEY, JSON.stringify(batches));
+    }
+
+    function markStudied(bookId, word) {
+      const studied = getStudied();
+      if (!studied[bookId]) studied[bookId] = [];
+      if (!studied[bookId].includes(word)) studied[bookId].push(word);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(studied));
+    }
+
+    function getStudiedSet(bookId) {
+      return new Set(getStudied()[bookId] || []);
+    }
+
+    // --- BOOK CONFIG ---
+    const BOOKS = [
+      {
+        id: 'number-the-stars',
+        title: 'Number the Stars',
+        author: 'Lois Lowry',
+        level: 'Grade 7 / Middle School',
+        focus: 'WWII, Holocaust, Danish resistance, courage, fear, sacrifice',
+        gradient: 'from-purple-600 to-pink-500',
+        bgLight: 'from-purple-100 to-pink-100',
+        getWords: () => NUMBER_THE_STARS_WORDS.map(expandWord)
+      },
+      {
+        id: 'chip-war',
+        title: 'Chip War',
+        author: 'Chris Miller',
+        level: 'Adult / Advanced',
+        focus: 'Semiconductors, geopolitics, manufacturing, US-China rivalry',
+        gradient: 'from-blue-600 to-cyan-500',
+        bgLight: 'from-blue-100 to-cyan-100',
+        getWords: () => CHIP_WAR_WORDS.map(expandWord)
+      },
+      {
+        id: 'eal-vocabulary',
+        title: 'Essential EAL Vocabulary',
+        author: 'Academic Word List',
+        level: 'Grade 7 International School',
+        focus: 'Academic vocabulary for all subjects, essay writing, discussion',
+        gradient: 'from-green-600 to-emerald-500',
+        bgLight: 'from-green-100 to-emerald-100',
+        getWords: () => EAL_WORDS.map(expandWord)
+      }
+    ];
+
+    // --- WORD DATA: Number the Stars (150 words) ---
+    const NUMBER_THE_STARS_WORDS = [
+      { w: 'resistance', p: '/rɪˈzɪstəns/', d: 'important', k: '저항 (점령군에 대한 조직적 저항)', c: 'action', s: 'opposition, defiance', a: 'surrender, submission', ex: [{ en: 'The Danish resistance helped Jews escape.', ko: '덴마크 저항군이 유대인들의 탈출을 도왔다.', usage: '역사적 맥락에서 조직적 저항' }, { en: 'She showed resistance to the idea.', ko: '그녀는 그 생각에 저항했다.', usage: '반대할 때' }, { en: 'Resistance to the Nazis grew.', ko: '나치에 대한 저항이 커졌다.', usage: '정치·군사적 저항' }] },
+      { w: 'persecution', p: '/ˌpɜːrsɪˈkjuːʃn/', d: 'important', k: '박해 (종교·인종 등으로 인한 탄압)', c: 'war', s: 'oppression, harassment', a: 'protection, acceptance', ex: [{ en: 'Jews faced persecution under the Nazis.', ko: '유대인들은 나치 치하에서 박해를 받았다.', usage: '홀로코스트·인권 맥락' }, { en: 'Persecution drove many to flee.', ko: '박해로 많은 사람들이 도망쳤다.', usage: '집단 탄압' }, { en: 'They fled religious persecution.', ko: '그들은 종교적 박해를 피해 도망쳤다.', usage: '종교적 맥락' }] },
+      { w: 'occupation', p: '/ˌɑːkjuˈpeɪʃn/', d: 'important', k: '점령 (군대가 타국 영토를 장악함)', c: 'war', s: 'invasion, takeover', a: 'liberation, independence', ex: [{ en: 'Denmark was under Nazi occupation.', ko: '덴마크는 나치 점령 하에 있었다.', usage: '전쟁사' }, { en: 'The occupation lasted five years.', ko: '점령은 5년간 지속되었다.', usage: '기간 표현' }, { en: 'Life during the occupation was hard.', ko: '점령 기간의 삶은 힘들었다.', usage: '일상적 맥락' }] },
+      { w: 'courage', p: '/ˈkɜːrɪdʒ/', d: 'basic', k: '용기 (두려움 속에서도 행동하는 힘)', c: 'character', s: 'bravery, valor', a: 'cowardice, fear', ex: [{ en: 'It took courage to hide the family.', ko: '그 가족을 숨기려면 용기가 필요했다.', usage: '도덕적 행동' }, { en: 'She showed great courage.', ko: '그녀는 큰 용기를 보여주었다.', usage: '칭찬' }, { en: 'Courage means acting despite fear.', ko: '용기는 두려움에도 행동하는 것이다.', usage: '정의' }] },
+      { w: 'sacrifice', p: '/ˈsækrɪfaɪs/', d: 'important', k: '희생 (다른 이를 위해 포기하거나 위험을 감수)', c: 'character', s: 'selflessness, offering', a: 'selfishness, gain', ex: [{ en: 'Parents made great sacrifices for their children.', ko: '부모들은 자녀를 위해 큰 희생을 했다.', usage: '가족·전쟁 맥락' }, { en: 'He sacrificed his safety to help others.', ko: '그는 다른 사람을 돕기 위해 자신의 안전을 희생했다.', usage: '도덕적 선택' }, { en: 'War demands many sacrifices.', ko: '전쟁은 많은 희생을 요구한다.', usage: '전쟁 맥락' }] },
+      { w: 'oppression', p: '/əˈpreʃn/', d: 'important', k: '억압 (힘으로 억누르는 것)', c: 'war', s: 'tyranny, suppression', a: 'freedom, liberation', ex: [{ en: 'They lived under oppression.', ko: '그들은 억압 아래에서 살았다.', usage: '정치적 맥락' }, { en: 'Oppression breeds resistance.', ko: '억압은 저항을 낳는다.', usage: '역사적 인과' }, { en: 'The oppression of minorities continued.', ko: '소수자에 대한 억압이 계속되었다.', usage: '인권' }] },
+      { w: 'tyranny', p: '/ˈtɪrəni/', d: 'advanced', k: '폭정, 전제 (잔인한 독재)', c: 'war', s: 'dictatorship, despotism', a: 'democracy, freedom', ex: [{ en: 'They escaped the tyranny of the regime.', ko: '그들은 그 정권의 폭정을 피해 도망쳤다.', usage: '정치' }, { en: 'Tyranny must be resisted.', ko: '폭정은 저항받아야 한다.', usage: '도덕적 주장' }, { en: 'The tyranny of the Nazis was brutal.', ko: '나치의 폭정은 잔혹했다.', usage: '역사' }] },
+      { w: 'escape', p: '/ɪˈskeɪp/', d: 'basic', k: '탈출하다, 도망치다', c: 'action', s: 'flee, get away', a: 'capture, remain', ex: [{ en: 'The family planned to escape by boat.', ko: '그 가족은 배로 탈출할 계획을 세웠다.', usage: '위험에서 벗어남' }, { en: 'They escaped to Sweden.', ko: '그들은 스웨덴으로 탈출했다.', usage: '목적지와 함께' }, { en: 'Escape was their only hope.', ko: '탈출이 그들의 유일한 희망이었다.', usage: '절박한 상황' }] },
+      { w: 'bravery', p: '/ˈbreɪvəri/', d: 'basic', k: '용감함, 담대함', c: 'character', s: 'courage, valor', a: 'cowardice', ex: [{ en: 'His bravery saved many lives.', ko: '그의 용기가 많은 생명을 구했다.', usage: '칭찬' }, { en: 'She acted with bravery.', ko: '그녀는 용기를 가지고 행동했다.', usage: '행동 묘사' }, { en: 'Bravery is not the absence of fear.', ko: '용기는 두려움이 없는 것이 아니다.', usage: '정의' }] },
+      { w: 'Holocaust', p: '/ˈhɔːləkɔːst/', d: 'important', k: '홀로코스트 (나치에 의한 유대인 대학살)', c: 'war', s: 'Shoah, genocide', a: '', ex: [{ en: 'The Holocaust took millions of lives.', ko: '홀로코스트로 수백만 명이 목숨을 잃었다.', usage: '역사적 사건' }, { en: 'Survivors of the Holocaust told their stories.', ko: '홀로코스트 생존자들이 자신의 이야기를 했다.', usage: '기억·증언' }, { en: 'We must never forget the Holocaust.', ko: '우리는 홀로코스트를 결코 잊어서는 안 된다.', usage: '교육·기억' }] },
+      { w: 'smuggle', p: '/ˈsmʌɡl/', d: 'important', k: '밀수하다, 몰래 옮기다', c: 'action', s: 'sneak, transport illegally', a: 'declare, surrender', ex: [{ en: 'They smuggled Jews to safety.', ko: '그들은 유대인들을 안전한 곳으로 몰래 옮겼다.', usage: '저항·구조' }, { en: 'Goods were smuggled across the border.', ko: '물품이 국경을 넘어 밀수되었다.', usage: '불법 거래' }, { en: 'Smuggling people was dangerous.', ko: '사람을 몰래 옮기는 것은 위험했다.', usage: '위험' }] },
+      { w: 'shelter', p: '/ˈʃeltər/', d: 'basic', k: '숨겨주다, 피난처를 제공하다 / 피난처', c: 'action', s: 'protect, refuge', a: 'expose, endanger', ex: [{ en: 'They gave shelter to the family.', ko: '그들은 그 가족에게 피난처를 제공했다.', usage: '도움' }, { en: 'The house provided shelter from the soldiers.', ko: '그 집은 병사들로부터 숨겨주는 곳이었다.', usage: '위험에서 보호' }, { en: 'Shelter was hard to find.', ko: '피난처를 찾기 어려웠다.', usage: '명사' }] },
+      { w: 'betray', p: '/bɪˈtreɪ/', d: 'important', k: '배반하다, 밀고하다', c: 'action', s: 'turn in, inform on', a: 'protect, loyal', ex: [{ en: 'He would never betray his friends.', ko: '그는 절대 친구를 배반하지 않을 것이다.', usage: '신뢰' }, { en: 'Betraying the hiding place meant death.', ko: '숨는 곳을 밀고하는 것은 죽음을 의미했다.', usage: '전쟁 맥락' }, { en: 'She felt betrayed by her neighbor.', ko: '그녀는 이웃에게 배반당했다고 느꼈다.', usage: '감정' }] },
+      { w: 'rumor', p: '/ˈruːmər/', d: 'basic', k: '소문, 풍문', c: 'setting', s: 'gossip, hearsay', a: 'fact, truth', ex: [{ en: 'Rumors of roundups spread quickly.', ko: '연행에 대한 소문이 빠르게 퍼졌다.', usage: '전쟁·불안' }, { en: 'It was just a rumor.', ko: '그건 단지 소문이었다.', usage: '부정' }, { en: 'Rumors made everyone afraid.', ko: '소문이 모두를 두렵게 했다.', usage: '영향' }] },
+      { w: 'suspicion', p: '/səˈspɪʃn/', d: 'important', k: '의심, 혐의', c: 'emotion', s: 'doubt, distrust', a: 'trust, certainty', ex: [{ en: 'They avoided suspicion by acting normal.', ko: '그들은 평소처럼 행동해 의심을 피했다.', usage: '위장' }, { en: 'Suspicion fell on the new neighbors.', ko: '의심이 새 이웃에게 쏠렸다.', usage: '대상' }, { en: 'She could not hide her suspicion.', ko: '그녀는 의심을 숨길 수 없었다.', usage: '감정' }] },
+      { w: 'determined', p: '/dɪˈtɜːrmɪnd/', d: 'basic', k: '결심한, 단호한', c: 'character', s: 'resolved, steadfast', a: 'hesitant, weak', ex: [{ en: 'She was determined to help.', ko: '그녀는 돕기로 결심했다.', usage: '의지' }, { en: 'His determined look gave them hope.', ko: '그의 단호한 표정이 그들에게 희망을 주었다.', usage: '영향' }, { en: 'They were determined to survive.', ko: '그들은 살아남기로 결심했다.', usage: '생존' }] },
+      { w: 'anguish', p: '/ˈæŋɡwɪʃ/', d: 'advanced', k: '극심한 고통, 비통', c: 'emotion', s: 'agony, torment', a: 'joy, peace', ex: [{ en: 'She felt anguish at the separation.', ko: '그녀는 이별에 극심한 고통을 느꼈다.', usage: '감정' }, { en: 'His face showed deep anguish.', ko: '그의 얼굴에 깊은 비통이 드러났다.', usage: '표정' }, { en: 'The anguish of war touched everyone.', ko: '전쟁의 고통이 모두에게 닿았다.', usage: '전쟁' }] },
+      { w: 'grief', p: '/ɡriːf/', d: 'basic', k: '슬픔, 비탄', c: 'emotion', s: 'sorrow, mourning', a: 'joy, happiness', ex: [{ en: 'They shared their grief in silence.', ko: '그들은 침묵 속에서 슬픔을 나눴다.', usage: '공유' }, { en: 'Grief overwhelmed the family.', ko: '슬픔이 가족을 압도했다.', usage: '강도' }, { en: 'She could not hide her grief.', ko: '그녀는 슬픔을 숨길 수 없었다.', usage: '감정' }] },
+      { w: 'terror', p: '/ˈterər/', d: 'important', k: '공포, 테러', c: 'emotion', s: 'fear, dread', a: 'calm, security', ex: [{ en: 'The soldiers spread terror.', ko: '병사들이 공포를 퍼뜨렸다.', usage: '전쟁' }, { en: 'She felt terror at the sound of boots.', ko: '그녀는 군화 소리에 공포를 느꼈다.', usage: '반응' }, { en: 'Terror was a daily experience.', ko: '공포는 일상이었다.', usage: '상황' }] },
+      { w: 'prejudice', p: '/ˈpredʒudɪs/', d: 'important', k: '편견 (근거 없는 선입견·차별)', c: 'war', s: 'bias, bigotry', a: 'fairness, tolerance', ex: [{ en: 'Nazi ideology was built on prejudice.', ko: '나치 이데올로기는 편견 위에 세워졌다.', usage: '역사' }, { en: 'Prejudice leads to persecution.', ko: '편견은 박해로 이어진다.', usage: '인과' }, { en: 'They fought against prejudice.', ko: '그들은 편견에 맞서 싸웠다.', usage: '저항' }] },
+      { w: 'dignity', p: '/ˈdɪɡnəti/', d: 'important', k: '존엄, 품위', c: 'character', s: 'self-respect, honor', a: 'humiliation, shame', ex: [{ en: 'They kept their dignity even in fear.', ko: '그들은 두려움 속에서도 존엄을 지켰다.', usage: '인간성' }, { en: 'Every person deserves dignity.', ko: '모든 사람은 존엄을 누릴 자격이 있다.', usage: '권리' }, { en: 'She carried herself with dignity.', ko: '그녀는 품위 있게 행동했다.', usage: '행동' }] },
+      { w: 'invade', p: '/ɪnˈveɪd/', d: 'important', k: '침략하다, 침입하다', c: 'war', s: 'attack, occupy', a: 'withdraw, defend', ex: [{ en: 'Germany invaded Denmark in 1940.', ko: '독일이 1940년 덴마크를 침략했다.', usage: '역사' }, { en: 'Soldiers invaded their homes.', ko: '병사들이 그들의 집에 침입했다.', usage: '일상' }, { en: 'The invasion brought fear.', ko: '침략이 공포를 가져왔다.', usage: '결과' }] },
+      { w: 'surrender', p: '/səˈrendər/', d: 'important', k: '항복하다, 굴복하다', c: 'war', s: 'give up, yield', a: 'resist, fight', ex: [{ en: 'Denmark surrendered quickly.', ko: '덴마크는 빠르게 항복했다.', usage: '전쟁사' }, { en: 'They would not surrender their values.', ko: '그들은 자신의 가치관을 굴복시키지 않았다.', usage: '도덕' }, { en: 'Surrender meant losing freedom.', ko: '항복은 자유를 잃는 것을 의미했다.', usage: '결과' }] },
+      { w: 'capture', p: '/ˈkæptʃər/', d: 'basic', k: '붙잡다, 포로로 잡다', c: 'action', s: 'arrest, seize', a: 'release, free', ex: [{ en: 'Anyone caught could be captured.', ko: '잡힌 사람은 누구나 포로가 될 수 있었다.', usage: '위험' }, { en: 'They tried to avoid capture.', ko: '그들은 붙잡히는 것을 피하려 했다.', usage: '목표' }, { en: 'Capture often meant deportation.', ko: '포로가 되는 것은 종종 강제 이송을 의미했다.', usage: '결과' }] },
+      { w: 'flee', p: '/fliː/', d: 'basic', k: '도망치다, 피하다', c: 'action', s: 'escape, run away', a: 'stay, face', ex: [{ en: 'Many had to flee their homes.', ko: '많은 사람들이 집을 떠나 도망쳐야 했다.', usage: '전쟁' }, { en: 'They fled to the coast.', ko: '그들은 해안으로 도망쳤다.', usage: '방향' }, { en: 'Fleeing was the only option.', ko: '도망치는 것이 유일한 선택이었다.', usage: '선택' }] },
+      { w: 'loyal', p: '/ˈlɔɪəl/', d: 'basic', k: '충성스러운, 믿음직한', c: 'character', s: 'faithful, devoted', a: 'disloyal, betraying', ex: [{ en: 'They remained loyal to their friends.', ko: '그들은 친구에게 충성을 유지했다.', usage: '우정' }, { en: 'Loyal neighbors could be trusted.', ko: '충성스러운 이웃은 믿을 수 있었다.', usage: '신뢰' }, { en: 'She was loyal even in danger.', ko: '그녀는 위험 속에서도 충성스러웠다.', usage: '시험' }] },
+      { w: 'whisper', p: '/ˈwɪspər/', d: 'basic', k: '속삭이다, 귀엣말', c: 'action', s: 'murmur, speak softly', a: 'shout, announce', ex: [{ en: 'They whispered so the soldiers would not hear.', ko: '병사들이 듣지 않도록 그들은 속삭였다.', usage: '비밀' }, { en: 'A whisper could mean danger.', ko: '속삭임은 위험을 의미할 수 있었다.', usage: '경고' }, { en: 'She whispered the plan.', ko: '그녀가 계획을 속삭였다.', usage: '전달' }] },
+      { w: 'innocence', p: '/ˈɪnəsns/', d: 'important', k: '순수함, 무죄 (어린이의 순진함)', c: 'character', s: 'purity, naivety', a: 'guilt, corruption', ex: [{ en: 'The children lost their innocence.', ko: '아이들은 순수를 잃었다.', usage: '전쟁의 영향' }, { en: 'She tried to protect their innocence.', ko: '그녀는 그들의 순수를 지키려 했다.', usage: '보호' }, { en: 'Innocence was no protection.', ko: '순수함은 보호가 되지 않았다.', usage: '현실' }] },
+      { w: 'relief', p: '/rɪˈliːf/', d: 'basic', k: '안도, 해방감', c: 'emotion', s: 'ease, comfort', a: 'anxiety, distress', ex: [{ en: 'They felt relief when they reached safety.', ko: '안전한 곳에 도착했을 때 그들은 안도했다.', usage: '도달' }, { en: 'Relief washed over her face.', ko: '안도가 그녀의 얼굴을 덮었다.', usage: '표현' }, { en: 'There was no relief from the fear.', ko: '공포에서의 안도는 없었다.', usage: '부정' }] },
+      { w: 'farewell', p: '/ˌferˈwel/', d: 'basic', k: '작별, 이별', c: 'emotion', s: 'goodbye, parting', a: 'greeting, reunion', ex: [{ en: 'They said farewell not knowing if they would meet again.', ko: '그들은 다시 만날지 모르며 작별을 고했다.', usage: '전쟁·이별' }, { en: 'Farewells were tearful.', ko: '작별은 눈물겨웠다.', usage: '감정' }, { en: 'It was a silent farewell.', ko: '그것은 말없는 작별이었다.', usage: '묘사' }] },
+      { w: 'border', p: '/ˈbɔːrdər/', d: 'basic', k: '국경, 경계', c: 'setting', s: 'frontier, boundary', a: 'interior, center', ex: [{ en: 'They had to cross the border at night.', ko: '그들은 밤에 국경을 넘어야 했다.', usage: '탈출' }, { en: 'The border was heavily guarded.', ko: '국경은 엄중히 경비되고 있었다.', usage: '위험' }, { en: 'Beyond the border lay safety.', ko: '국경 너머에 안전이 있었다.', usage: '희망' }] },
+      { w: 'roundup', p: '/ˈraʊndʌp/', d: 'important', k: '일제 검거, 연행', c: 'war', s: 'arrest, seizure', a: 'release, freedom', ex: [{ en: 'Rumors of a roundup spread.', ko: '일제 검거 소문이 퍼졌다.', usage: '나치' }, { en: 'They hid before the roundup.', ko: '그들은 검거 전에 숨었다.', usage: '대응' }, { en: 'The roundup targeted Jews.', ko: '그 검거는 유대인을 겨냥했다.', usage: '대상' }] },
+      { w: 'deportation', p: '/ˌdiːpɔːrˈteɪʃn/', d: 'advanced', k: '강제 이송, 추방', c: 'war', s: 'expulsion, removal', a: 'asylum, stay', ex: [{ en: 'Deportation meant almost certain death.', ko: '강제 이송은 거의 확실한 죽음을 의미했다.', usage: '홀로코스트' }, { en: 'They feared deportation daily.', ko: '그들은 매일 강제 이송을 두려워했다.', usage: '공포' }, { en: 'Escaping deportation was the goal.', ko: '강제 이송을 피하는 것이 목표였다.', usage: '목표' }] },
+      { w: 'concentration camp', p: '/ˌkɑːnsnˈtreɪʃn kæmp/', d: 'important', k: '강제 수용소 (나치의 수용소)', c: 'war', s: 'camp, prison camp', a: 'freedom, home', ex: [{ en: 'Many were sent to concentration camps.', ko: '많은 사람들이 강제 수용소로 보내졌다.', usage: '홀로코스트' }, { en: 'News of the camps spread slowly.', ko: '수용소 소식이 천천히 퍼졌다.', usage: '역사' }, { en: 'Surviving the camp was rare.', ko: '수용소에서 살아남는 것은 드물었다.', usage: '생존' }] },
+      { w: 'Star of David', p: '/stɑːr əv ˈdeɪvɪd/', d: 'basic', k: '다윗의 별 (유대인 상징)', c: 'war', s: 'Jewish star, Magen David', a: '', ex: [{ en: 'Jews had to wear the Star of David.', ko: '유대인들은 다윗의 별을 달아야 했다.', usage: '나치 정책' }, { en: 'The star marked them for persecution.', ko: '그 별이 그들을 박해 대상으로 표시했다.', usage: '차별' }, { en: 'She hid her Star of David.', ko: '그녀는 다윗의 별을 숨겼다.', usage: '저항' }] },
+      { w: 'synagogue', p: '/ˈsɪnəɡɒɡ/', d: 'important', k: '유대교 회당', c: 'setting', s: 'temple, shul', a: '', ex: [{ en: 'The synagogue was closed by the Nazis.', ko: '회당은 나치에 의해 폐쇄되었다.', usage: '박해' }, { en: 'They met at the synagogue.', ko: '그들은 회당에서 만났다.', usage: '장소' }, { en: 'The synagogue was a center of community.', ko: '회당은 공동체의 중심이었다.', usage: '역할' }] },
+      { w: 'rabbi', p: '/ˈræbaɪ/', d: 'basic', k: '랍비 (유대교 종교 지도자)', c: 'setting', s: 'Jewish leader, teacher', a: '', ex: [{ en: 'The rabbi helped families escape.', ko: '랍비가 가족들의 탈출을 도왔다.', usage: '역할' }, { en: 'They sought advice from the rabbi.', ko: '그들은 랍비에게 조언을 구했다.', usage: '신뢰' }, { en: 'The rabbi was arrested.', ko: '랍비가 체포되었다.', usage: '박해' }] },
+      { w: 'Copenhagen', p: '/ˌkoʊpənˈheɪɡən/', d: 'basic', k: '코펜하겐 (덴마크 수도)', c: 'setting', s: 'Danish capital', a: '', ex: [{ en: 'The story is set in Copenhagen.', ko: '이야기는 코펜하겐을 배경으로 한다.', usage: '배경' }, { en: 'They lived in Copenhagen.', ko: '그들은 코펜하겐에 살았다.', usage: '장소' }, { en: 'Copenhagen was occupied in 1940.', ko: '코펜하겐은 1940년 점령되었다.', usage: '역사' }] },
+      { w: 'fisherman', p: '/ˈfɪʃərmən/', d: 'basic', k: '어부', c: 'setting', s: 'fisher, boatman', a: '', ex: [{ en: 'The fisherman helped them cross the water.', ko: '그 어부가 그들이 바다를 건너는 것을 도왔다.', usage: '탈출' }, { en: 'Fishermen knew the coast.', ko: '어부들은 해안을 잘 알았다.', usage: '지식' }, { en: 'He was a brave fisherman.', ko: '그는 용감한 어부였다.', usage: '인물' }] },
+      { w: 'despair', p: '/dɪˈsper/', d: 'important', k: '절망', c: 'emotion', s: 'hopelessness, misery', a: 'hope, optimism', ex: [{ en: 'Despair filled the streets.', ko: '절망이 거리를 채웠다.', usage: '분위기' }, { en: 'She refused to give in to despair.', ko: '그녀는 절망에 굴복하지 않았다.', usage: '저항' }, { en: 'In the darkest time, despair was easy.', ko: '가장 어두운 때에는 절망이 쉬웠다.', usage: '상황' }] },
+      { w: 'hope', p: '/hoʊp/', d: 'basic', k: '희망', c: 'emotion', s: 'expectation, wish', a: 'despair, hopelessness', ex: [{ en: 'They held on to hope.', ko: '그들은 희망을 놓지 않았다.', usage: '유지' }, { en: 'Hope kept them going.', ko: '희망이 그들을 움직이게 했다.', usage: '동기' }, { en: 'There was little hope left.', ko: '남은 희망은 거의 없었다.', usage: '절박' }] },
+      { w: 'moral', p: '/ˈmɔːrəl/', d: 'important', k: '도덕적인, 양심에 따른', c: 'character', s: 'ethical, right', a: 'immoral, wrong', ex: [{ en: 'It was a moral choice to help.', ko: '돕기로 한 것은 도덕적 선택이었다.', usage: '선택' }, { en: 'They faced a moral dilemma.', ko: '그들은 도덕적 딜레마에 직면했다.', usage: '갈등' }, { en: 'Moral courage was rare.', ko: '도덕적 용기는 드물었다.', usage: '가치' }] },
+      { w: 'frightened', p: '/ˈfraɪtnd/', d: 'basic', k: '겁먹은, 두려워하는', c: 'emotion', s: 'scared, afraid', a: 'brave, calm', ex: [{ en: 'The children were frightened.', ko: '아이들은 겁에 질려 있었다.', usage: '반응' }, { en: 'She tried not to look frightened.', ko: '그녀는 겁먹은 듯 보이지 않으려 했다.', usage: '숨기기' }, { en: 'Frightened people made bad decisions.', ko: '겁먹은 사람들은 나쁜 결정을 내렸다.', usage: '영향' }] },
+      { w: 'gentle', p: '/ˈdʒentl/', d: 'basic', k: '온화한, 부드러운', c: 'character', s: 'kind, soft', a: 'harsh, cruel', ex: [{ en: 'He had a gentle voice.', ko: '그는 부드러운 목소리를 가졌다.', usage: '묘사' }, { en: 'She was gentle with the children.', ko: '그녀는 아이들에게 온화했다.', usage: '행동' }, { en: 'Gentle acts mattered in dark times.', ko: '어두운 시대에 온화한 행동이 중요했다.', usage: '가치' }] },
+      { w: 'cruel', p: '/ˈkruːəl/', d: 'basic', k: '잔인한, 무자비한', c: 'character', s: 'brutal, harsh', a: 'kind, gentle', ex: [{ en: 'The soldiers were cruel.', ko: '병사들은 잔인했다.', usage: '묘사' }, { en: 'Cruel laws targeted innocent people.', ko: '잔인한 법이 무고한 사람들을 겨냥했다.', usage: '정책' }, { en: 'She had never seen such cruelty.', ko: '그녀는 그런 잔인함을 본 적이 없었다.', usage: '경험' }] },
+      { w: 'protect', p: '/prəˈtekt/', d: 'basic', k: '보호하다, 지키다', c: 'action', s: 'guard, defend', a: 'harm, endanger', ex: [{ en: 'Parents tried to protect their children.', ko: '부모들은 자녀를 보호하려 했다.', usage: '가족' }, { en: 'They risked everything to protect others.', ko: '그들은 다른 사람을 보호하기 위해 모든 것을 걸었다.', usage: '희생' }, { en: 'No one could protect them from the law.', ko: '아무도 그들을 법으로부터 보호할 수 없었다.', usage: '한계' }] },
+      { w: 'endanger', p: '/ɪnˈdeɪndʒər/', d: 'important', k: '위험에 빠뜨리다', c: 'action', s: 'risk, threaten', a: 'protect, save', ex: [{ en: 'Helping them could endanger the whole family.', ko: '그들을 돕는 것은 온 가족을 위험에 빠뜨릴 수 있었다.', usage: '위험' }, { en: 'She would not endanger her children.', ko: '그녀는 자녀를 위험에 빠뜨리지 않을 것이다.', usage: '보호' }, { en: 'They endangered themselves to save others.', ko: '그들은 다른 사람을 구하기 위해 자신을 위험에 빠뜨렸다.', usage: '용기' }] },
+      { w: 'rescue', p: '/ˈreskjuː/', d: 'important', k: '구조하다, 구출하다', c: 'action', s: 'save, free', a: 'abandon, harm', ex: [{ en: 'The resistance helped rescue many.', ko: '저항군이 많은 사람을 구하는 것을 도왔다.', usage: '역할' }, { en: 'Rescue operations were secret.', ko: '구조 작전은 비밀이었다.', usage: '방식' }, { en: 'They planned the rescue carefully.', ko: '그들은 구조를 신중히 계획했다.', usage: '계획' }] },
+      { w: 'arrest', p: '/əˈrest/', d: 'basic', k: '체포하다', c: 'action', s: 'capture, detain', a: 'release, free', ex: [{ en: 'Anyone could be arrested without reason.', ko: '누구나 이유 없이 체포될 수 있었다.', usage: '공포' }, { en: 'They arrested the rabbi.', ko: '그들은 랍비를 체포했다.', usage: '대상' }, { en: 'Arrest meant interrogation or worse.', ko: '체포는 심문 또는 그 이상을 의미했다.', usage: '결과' }] },
+      { w: 'execute', p: '/ˈeksɪkjuːt/', d: 'advanced', k: '처형하다, 사형시키다', c: 'war', s: 'kill, put to death', a: 'pardon, spare', ex: [{ en: 'Resistance fighters could be executed.', ko: '저항군은 처형될 수 있었다.', usage: '위험' }, { en: 'They executed those who helped Jews.', ko: '그들은 유대인을 돕는 사람들을 처형했다.', usage: '나치' }, { en: 'Execution was public to spread fear.', ko: '처형은 공포를 퍼뜨리기 위해 공개되었다.', usage: '목적' }] },
+      { w: 'disappear', p: '/ˌdɪsəˈpɪər/', d: 'basic', k: '사라지다, 실종되다', c: 'action', s: 'vanish, go missing', a: 'appear, return', ex: [{ en: 'People disappeared in the night.', ko: '사람들이 밤에 사라졌다.', usage: '공포' }, { en: 'They had to disappear before the roundup.', ko: '그들은 검거 전에 사라져야 했다.', usage: '탈출' }, { en: 'Many who disappeared never returned.', ko: '사라진 많은 사람들이 돌아오지 않았다.', usage: '결과' }] },
+      { w: 'trust', p: '/trʌst/', d: 'basic', k: '신뢰, 믿음', c: 'character', s: 'faith, confidence', a: 'distrust, suspicion', ex: [{ en: 'Trust was dangerous but necessary.', ko: '신뢰는 위험했지만 필요했다.', usage: '역설' }, { en: 'They had to trust the fisherman.', ko: '그들은 그 어부를 믿어야 했다.', usage: '필요' }, { en: 'Betraying trust meant death.', ko: '신뢰를 배반하는 것은 죽음을 의미했다.', usage: '위험' }] },
+      { w: 'stranger', p: '/ˈstreɪndʒər/', d: 'basic', k: '낯선 사람, 타인', c: 'setting', s: 'unknown person, outsider', a: 'friend, family', ex: [{ en: 'Strangers could be informers.', ko: '낯선 사람은 밀고자일 수 있었다.', usage: '의심' }, { en: 'They depended on kind strangers.', ko: '그들은 친절한 타인에게 의존했다.', usage: '도움' }, { en: 'A stranger offered to help.', ko: '낯선 사람이 도움을 제안했다.', usage: '행동' }] },
+      { w: 'promise', p: '/ˈprɑːmɪs/', d: 'basic', k: '약속 (하다)', c: 'action', s: 'vow, pledge', a: 'break promise, betray', ex: [{ en: 'She made a promise to keep the secret.', ko: '그녀는 비밀을 지키기로 약속했다.', usage: '비밀' }, { en: 'He kept his promise.', ko: '그는 약속을 지켰다.', usage: '신뢰' }, { en: 'Promises were sacred in dangerous times.', ko: '위험한 시대에 약속은 신성했다.', usage: '가치' }] },
+      { w: 'secret', p: '/ˈsiːkrət/', d: 'basic', k: '비밀', c: 'setting', s: 'confidence, hidden', a: 'public, known', ex: [{ en: 'The hiding place was a secret.', ko: '숨는 곳은 비밀이었다.', usage: '안전' }, { en: 'She could not tell the secret.', ko: '그녀는 비밀을 말할 수 없었다.', usage: '침묵' }, { en: 'Secrets could save or destroy.', ko: '비밀은 구할 수도 있고 파괴할 수도 있었다.', usage: '역할' }] },
+      { w: 'lie', p: '/laɪ/', d: 'basic', k: '거짓말 (하다)', c: 'action', s: 'falsehood, deceive', a: 'truth, honesty', ex: [{ en: 'Sometimes a lie could save lives.', ko: '때로 거짓말이 생명을 구할 수 있었다.', usage: '도덕적 딜레마' }, { en: 'She had to lie to the soldiers.', ko: '그녀는 병사들에게 거짓말을 해야 했다.', usage: '생존' }, { en: 'Lying weighed on her conscience.', ko: '거짓말이 그녀의 양심을 무겁게 했다.', usage: '감정' }] },
+      { w: 'truth', p: '/truːθ/', d: 'basic', k: '진실, 사실', c: 'setting', s: 'reality, fact', a: 'lie, falsehood', ex: [{ en: 'The truth was too dangerous to tell.', ko: '진실은 말하기에 너무 위험했다.', usage: '침묵' }, { en: 'They hid the truth from the children.', ko: '그들은 아이들에게 진실을 숨겼다.', usage: '보호' }, { en: 'Truth would come out after the war.', ko: '진실은 전쟁 후에 드러날 것이다.', usage: '희망' }] },
+      { w: 'cowardice', p: '/ˈkaʊərdɪs/', d: 'advanced', k: '겁함, 비겁함', c: 'character', s: 'fearfulness, weakness', a: 'courage, bravery', ex: [{ en: 'She refused to show cowardice.', ko: '그녀는 비겁함을 보이기를 거부했다.', usage: '저항' }, { en: 'Cowardice was understandable but painful.', ko: '겁은 이해할 수 있지만 고통스러웠다.', usage: '인간성' }, { en: 'They mistook caution for cowardice.', ko: '그들은 신중함을 비겁함으로 오해했다.', usage: '오해' }] },
+      { w: 'silence', p: '/ˈsaɪləns/', d: 'basic', k: '침묵, 고요', c: 'setting', s: 'quiet, hush', a: 'noise, speech', ex: [{ en: 'Silence could mean safety.', ko: '침묵은 안전을 의미할 수 있었다.', usage: '전략' }, { en: 'They kept silence about the plan.', ko: '그들은 계획에 대해 침묵을 지켰다.', usage: '비밀' }, { en: 'The silence of the night was eerie.', ko: '밤의 고요는 으스스했다.', usage: '분위기' }] },
+      { w: 'uniform', p: '/ˈjuːnɪfɔːrm/', d: 'basic', k: '제복 (군인·경찰 등)', c: 'war', s: 'outfit, attire', a: 'civilian clothes', ex: [{ en: 'The uniform meant danger.', ko: '제복은 위험을 의미했다.', usage: '나치' }, { en: 'Soldiers in uniform filled the streets.', ko: '제복을 입은 병사들이 거리를 채웠다.', usage: '점령' }, { en: 'She avoided anyone in uniform.', ko: '그녀는 제복을 입은 사람을 피했다.', usage: '반응' }] },
+      { w: 'liberty', p: '/ˈlɪbərti/', d: 'important', k: '자유, 해방', c: 'war', s: 'freedom, independence', a: 'slavery, oppression', ex: [{ en: 'They fought for liberty.', ko: '그들은 자유를 위해 싸웠다.', usage: '가치' }, { en: 'Liberty was worth any risk.', ko: '자유는 어떤 위험보다 가치 있었다.', usage: '희생' }, { en: 'The loss of liberty was gradual.', ko: '자유의 상실은 점진적이었다.', usage: '역사' }] },
+      { w: 'freedom', p: '/ˈfriːdəm/', d: 'basic', k: '자유', c: 'war', s: 'liberty, independence', a: 'slavery, captivity', ex: [{ en: 'They risked everything for freedom.', ko: '그들은 자유를 위해 모든 것을 걸었다.', usage: '동기' }, { en: 'Freedom was taken away step by step.', ko: '자유가 단계적으로 빼앗겼다.', usage: '과정' }, { en: 'Across the water was freedom.', ko: '바다 건너에 자유가 있었다.', usage: '희망' }] },
+      { w: 'journey', p: '/ˈdʒɜːrni/', d: 'basic', k: '여정, 여행', c: 'action', s: 'trip, voyage', a: 'stay, rest', ex: [{ en: 'The journey to safety was long.', ko: '안전으로 가는 여정은 길었다.', usage: '탈출' }, { en: 'They began their journey at night.', ko: '그들은 밤에 여정을 시작했다.', usage: '시작' }, { en: 'The journey required courage.', ko: '그 여정에는 용기가 필요했다.', usage: '요구' }] },
+      { w: 'memory', p: '/ˈmeməri/', d: 'basic', k: '기억, 추억', c: 'emotion', s: 'recollection, remembrance', a: 'forgetting, amnesia', ex: [{ en: 'She would carry the memory forever.', ko: '그녀는 그 기억을 영원히 간직할 것이다.', usage: '과거' }, { en: 'Memories of peace seemed distant.', ko: '평화의 기억은 멀게 느껴졌다.', usage: '대비' }, { en: 'We must keep the memory alive.', ko: '우리는 그 기억을 살려두어야 한다.', usage: '교육' }] },
+      { w: 'hatred', p: '/ˈheɪtrɪd/', d: 'important', k: '증오, 미움', c: 'emotion', s: 'hostility, animosity', a: 'love, compassion', ex: [{ en: 'Nazi ideology was built on hatred.', ko: '나치 이데올로기는 증오 위에 세워졌다.', usage: '역사' }, { en: 'Hatred destroyed communities.', ko: '증오가 공동체를 파괴했다.', usage: '결과' }, { en: 'She refused to feel hatred.', ko: '그녀는 증오를 느끼기를 거부했다.', usage: '저항' }] },
+      { w: 'compassion', p: '/kəmˈpæʃn/', d: 'important', k: '연민, 동정심', c: 'character', s: 'empathy, mercy', a: 'cruelty, indifference', ex: [{ en: 'Compassion moved people to help.', ko: '연민이 사람들을 돕게 했다.', usage: '동기' }, { en: 'She showed compassion to strangers.', ko: '그녀는 낯선 사람에게 연민을 보였다.', usage: '행동' }, { en: 'In dark times, compassion was rare.', ko: '어두운 시대에 연민은 드물었다.', usage: '가치' }] },
+      { w: 'survivor', p: '/sərˈvaɪvər/', d: 'important', k: '생존자', c: 'setting', s: 'one who lived', a: 'victim (who died)', ex: [{ en: 'Survivors told their stories.', ko: '생존자들이 자신의 이야기를 했다.', usage: '증언' }, { en: 'She was a survivor of the war.', ko: '그녀는 전쟁의 생존자였다.', usage: '정체성' }, { en: 'Survivors carried guilt and grief.', ko: '생존자들은 죄책감과 슬픔을 안고 살았다.', usage: '감정' }] },
+      { w: 'innocent', p: '/ˈɪnəsnt/', d: 'basic', k: '무고한, 결백한', c: 'character', s: 'guiltless, blameless', a: 'guilty, responsible', ex: [{ en: 'Innocent people were targeted.', ko: '무고한 사람들이 표적이 되었다.', usage: '불의' }, { en: 'The children were innocent.', ko: '아이들은 결백했다.', usage: '보호' }, { en: 'Being innocent offered no protection.', ko: '결백하다고 해서 보호받는 것은 아니었다.', usage: '현실' }] },
+      { w: 'obedience', p: '/əˈbiːdiəns/', d: 'important', k: '복종, 순종', c: 'action', s: 'compliance, submission', a: 'disobedience, defiance', ex: [{ en: 'Blind obedience allowed the regime.', ko: '맹목적 복종이 그 정권을 가능하게 했다.', usage: '역사' }, { en: 'They demanded obedience.', ko: '그들은 복종을 요구했다.', usage: '권력' }, { en: 'She chose disobedience over obedience.', ko: '그녀는 복종보다 불복종을 선택했다.', usage: '저항' }] },
+      { w: 'defiance', p: '/dɪˈfaɪəns/', d: 'advanced', k: '저항, 반항', c: 'action', s: 'resistance, rebellion', a: 'obedience, submission', ex: [{ en: 'Small acts of defiance mattered.', ko: '작은 저항의 행동도 의미 있었다.', usage: '저항' }, { en: 'She looked at him with defiance.', ko: '그녀는 저항하는 눈빛으로 그를 바라봤다.', usage: '태도' }, { en: 'Defiance could mean death.', ko: '저항은 죽음을 의미할 수 있었다.', usage: '위험' }] },
+      { w: 'witness', p: '/ˈwɪtnəs/', d: 'important', k: '목격자, 증인 / 목격하다', c: 'action', s: 'observer, see', a: 'ignore, miss', ex: [{ en: 'She witnessed the roundup.', ko: '그녀는 검거를 목격했다.', usage: '경험' }, { en: 'Witnesses were too afraid to speak.', ko: '목격자들은 말하기를 너무 두려워했다.', usage: '침묵' }, { en: 'We must bear witness to history.', ko: '우리는 역사에 증인이 되어야 한다.', usage: '기억' }] },
+      { w: 'denounce', p: '/dɪˈnaʊns/', d: 'advanced', k: '고발하다, 밀고하다', c: 'action', s: 'accuse, report', a: 'protect, defend', ex: [{ en: 'Some denounce their neighbors.', ko: '어떤 사람들은 이웃을 고발했다.', usage: '협력' }, { en: 'To denounce was to betray.', ko: '고발하는 것은 배반하는 것이었다.', usage: '도덕' }, { en: 'They feared being denounced.', ko: '그들은 고발당하는 것을 두려워했다.', usage: '공포' }] },
+      { w: 'collaborator', p: '/kəˈlæbəreɪtər/', d: 'advanced', k: '협력자 (점령군에 협력하는 자)', c: 'war', s: 'traitor, informer', a: 'resister, patriot', ex: [{ en: 'Collaborators helped the occupiers.', ko: '협력자들은 점령군을 도왔다.', usage: '역할' }, { en: 'They despised collaborators.', ko: '그들은 협력자를 경멸했다.', usage: '감정' }, { en: 'After the war, collaborators were tried.', ko: '전쟁 후 협력자들은 재판을 받았다.', usage: '역사' }] },
+      { w: 'patriot', p: '/ˈpeɪtriət/', d: 'important', k: '애국자', c: 'character', s: 'loyal citizen, nationalist', a: 'traitor, collaborator', ex: [{ en: 'The resistance were patriots.', ko: '저항군은 애국자들이었다.', usage: '정체성' }, { en: 'True patriots helped the persecuted.', ko: '진정한 애국자는 박해받는 이를 도왔다.', usage: '도덕' }, { en: 'Patriotism meant more than flag-waving.', ko: '애국심은 깃발 흔들기 이상이었다.', usage: '의미' }] },
+      { w: 'ally', p: '/ˈælaɪ/', d: 'basic', k: '동맹국, 동지', c: 'war', s: 'partner, friend', a: 'enemy, foe', ex: [{ en: 'Sweden was a neutral ally for escape.', ko: '스웨덴은 탈출을 위한 중립적 동맹이었다.', usage: '역사' }, { en: 'They needed allies to survive.', ko: '그들은 생존하기 위해 동맹이 필요했다.', usage: '필요' }, { en: 'Allies provided shelter.', ko: '동맹자들이 피난처를 제공했다.', usage: '도움' }] },
+      { w: 'neutral', p: '/ˈnuːtrəl/', d: 'important', k: '중립적인', c: 'war', s: 'impartial, unaligned', a: 'allied, partisan', ex: [{ en: 'Sweden stayed neutral during the war.', ko: '스웨덴은 전쟁 동안 중립을 유지했다.', usage: '역사' }, { en: 'Neutral countries offered refuge.', ko: '중립국들이 피난처를 제공했다.', usage: '역할' }, { en: 'It was hard to remain neutral.', ko: '중립을 유지하기는 어려웠다.', usage: '도덕' }] },
+      { w: 'refuge', p: '/ˈrefjuːdʒ/', d: 'important', k: '피난처, 망명지', c: 'setting', s: 'sanctuary, asylum', a: 'danger, exposure', ex: [{ en: 'They sought refuge in Sweden.', ko: '그들은 스웨덴에서 피난처를 찾았다.', usage: '탈출' }, { en: 'Refuge was hard to find.', ko: '피난처를 찾기 어려웠다.', usage: '난관' }, { en: 'The house offered temporary refuge.', ko: '그 집은 일시적 피난처를 제공했다.', usage: '도움' }] },
+      { w: 'asylum', p: '/əˈsaɪləm/', d: 'advanced', k: '망명, 피난', c: 'war', s: 'refuge, sanctuary', a: 'expulsion, rejection', ex: [{ en: 'They applied for asylum.', ko: '그들은 망명을 신청했다.', usage: '법적' }, { en: 'Asylum saved many lives.', ko: '망명이 많은 생명을 구했다.', usage: '역할' }, { en: 'Denial of asylum was a death sentence.', ko: '망명 거부는 사형 선고나 다름없었다.', usage: '결과' }] },
+      { w: 'persecute', p: '/ˈpɜːrsɪkjuːt/', d: 'important', k: '박해하다', c: 'action', s: 'oppress, harass', a: 'protect, support', ex: [{ en: 'The regime persecuted Jews.', ko: '그 정권은 유대인을 박해했다.', usage: '역사' }, { en: 'Persecuted groups fled.', ko: '박해받는 집단이 도망쳤다.', usage: '반응' }, { en: 'To persecute is to violate human dignity.', ko: '박해하는 것은 인간의 존엄을 유린하는 것이다.', usage: '도덕' }] },
+      { w: 'occupy', p: '/ˈɑːkjupaɪ/', d: 'important', k: '점령하다', c: 'war', s: 'take over, invade', a: 'liberate, free', ex: [{ en: 'Germany occupied Denmark.', ko: '독일이 덴마크를 점령했다.', usage: '역사' }, { en: 'Occupying forces imposed curfews.', ko: '점령군이 통행 금지를 부과했다.', usage: '통제' }, { en: 'Life under occupation was restricted.', ko: '점령 하의 삶은 제한적이었다.', usage: '일상' }] },
+      { w: 'liberate', p: '/ˈlɪbəreɪt/', d: 'important', k: '해방하다', c: 'war', s: 'free, release', a: 'occupy, enslave', ex: [{ en: 'Allies liberated Denmark in 1945.', ko: '연합국이 1945년 덴마크를 해방했다.', usage: '역사' }, { en: 'Liberation brought joy and grief.', ko: '해방은 기쁨과 슬픔을 가져왔다.', usage: '감정' }, { en: 'They waited for liberation.', ko: '그들은 해방을 기다렸다.', usage: '희망' }] },
+      { w: 'curfew', p: '/ˈkɜːrfjuː/', d: 'important', k: '통행 금지, 야간 외출 금지', c: 'war', s: 'restriction, lockdown', a: 'freedom of movement', ex: [{ en: 'A curfew was imposed at dusk.', ko: '해질 무렵 통행 금지가 부과되었다.', usage: '통제' }, { en: 'Breaking the curfew was dangerous.', ko: '통행 금지를 어기는 것은 위험했다.', usage: '위험' }, { en: 'Curfews limited daily life.', ko: '통행 금지가 일상을 제한했다.', usage: '영향' }] },
+      { w: 'ration', p: '/ˈræʃn/', d: 'important', k: '배급 (하다), 배급량', c: 'war', s: 'allotment, quota', a: 'surplus, plenty', ex: [{ en: 'Food was rationed.', ko: '식량이 배급되었다.', usage: '전쟁' }, { en: 'Rations were never enough.', ko: '배급량은 충분하지 않았다.', usage: '부족' }, { en: 'They shared their rations.', ko: '그들은 배급품을 나눴다.', usage: '나눔' }] },
+      { w: 'blackout', p: '/ˈblækaʊt/', d: 'important', k: '등화 통제, 블랙아웃', c: 'war', s: 'darkness, no lights', a: 'lights on', ex: [{ en: 'Blackouts hid the city at night.', ko: '등화 통제로 밤에는 도시가 숨겨졌다.', usage: '전쟁' }, { en: 'During blackout, no light was allowed.', ko: '등화 통제 시간에는 불을 켤 수 없었다.', usage: '규칙' }, { en: 'Blackouts made escape easier.', ko: '블랙아웃이 탈출을 쉽게 했다.', usage: '역설' }] },
+      { w: 'raid', p: '/reɪd/', d: 'important', k: '급습, 일제 검거', c: 'war', s: 'attack, roundup', a: 'retreat, leave', ex: [{ en: 'The raid came at dawn.', ko: '급습은 새벽에 왔다.', usage: '공포' }, { en: 'They escaped before the raid.', ko: '그들은 급습 전에 도망쳤다.', usage: '탈출' }, { en: 'Raids targeted Jewish homes.', ko: '급습은 유대인 가정을 겨냥했다.', usage: '대상' }] },
+      { w: 'interrogate', p: '/ɪnˈterəɡeɪt/', d: 'advanced', k: '심문하다', c: 'action', s: 'question, grill', a: 'release, free', ex: [{ en: 'Prisoners were interrogated.', ko: '포로들은 심문을 받았다.', usage: '나치' }, { en: 'Interrogation often involved torture.', ko: '심문은 종종 고문을 동반했다.', usage: '공포' }, { en: 'She feared being interrogated.', ko: '그녀는 심문당하는 것을 두려워했다.', usage: '두려움' }] },
+      { w: 'informant', p: '/ɪnˈfɔːrmənt/', d: 'advanced', k: '정보원, 밀고자', c: 'war', s: 'informer, spy', a: 'protector, ally', ex: [{ en: 'Informants betrayed hiding families.', ko: '밀고자들이 숨겨진 가족들을 배반했다.', usage: '위험' }, { en: 'No one knew who the informant was.', ko: '아무도 밀고자가 누구인지 몰랐다.', usage: '의심' }, { en: 'Trust was broken by informants.', ko: '신뢰가 밀고자들에 의해 깨졌다.', usage: '결과' }] },
+      { w: 'underground', p: '/ˈʌndərɡraʊnd/', d: 'important', k: '지하 조직, 비밀 조직', c: 'war', s: 'resistance, secret network', a: 'official, public', ex: [{ en: 'The underground helped Jews escape.', ko: '지하 조직이 유대인 탈출을 도왔다.', usage: '역할' }, { en: 'She worked with the underground.', ko: '그녀는 지하 조직과 일했다.', usage: '참여' }, { en: 'Underground activities were dangerous.', ko: '지하 활동은 위험했다.', usage: '위험' }] },
+      { w: 'convoy', p: '/ˈkɑːnvɔɪ/', d: 'advanced', k: '호송, 수송대', c: 'war', s: 'escort, transport', a: 'scatter, abandon', ex: [{ en: 'A convoy took them to the coast.', ko: '호송대가 그들을 해안으로 데려갔다.', usage: '탈출' }, { en: 'The convoy moved at night.', ko: '수송대는 밤에 움직였다.', usage: '비밀' }, { en: 'Convoys were targets for attack.', ko: '호송대는 공격의 표적이었다.', usage: '위험' }] },
+      { w: 'starvation', p: '/stɑːrˈveɪʃn/', d: 'important', k: '기아, 굶주림', c: 'war', s: 'hunger, famine', a: 'plenty, abundance', ex: [{ en: 'Starvation was common in the camps.', ko: '수용소에서 기아는 흔했다.', usage: '홀로코스트' }, { en: 'Rations were meant to prevent starvation.', ko: '배급은 기아를 막기 위한 것이었다.', usage: '정책' }, { en: 'Many died of starvation.', ko: '많은 사람이 굶주림으로 죽었다.', usage: '결과' }] },
+      { w: 'weapon', p: '/ˈwepən/', d: 'basic', k: '무기', c: 'war', s: 'arms, gun', a: 'tool for peace', ex: [{ en: 'Soldiers carried weapons.', ko: '병사들은 무기를 휴대했다.', usage: '위협' }, { en: 'Weapons meant power to the occupiers.', ko: '무기는 점령군에게 권력을 의미했다.', usage: '권력' }, { en: 'The resistance had few weapons.', ko: '저항군은 무기가 거의 없었다.', usage: '대비' }] },
+      { w: 'invasion', p: '/ɪnˈveɪʒn/', d: 'important', k: '침략, 침공', c: 'war', s: 'attack, occupation', a: 'withdrawal, peace', ex: [{ en: 'The invasion came without warning.', ko: '침략은 경고 없이 왔다.', usage: '역사' }, { en: 'Denmark was unprepared for invasion.', ko: '덴마크는 침략에 준비되지 않았다.', usage: '대응' }, { en: 'Life changed after the invasion.', ko: '침략 후 삶이 바뀌었다.', usage: '영향' }] },
+      { w: 'regime', p: '/reɪˈʒiːm/', d: 'important', k: '정권, 체제', c: 'war', s: 'government, rule', a: 'opposition, resistance', ex: [{ en: 'The Nazi regime spread fear.', ko: '나치 정권이 공포를 퍼뜨렸다.', usage: '역사' }, { en: 'The regime passed unjust laws.', ko: '그 정권은 부당한 법을 통과시켰다.', usage: '정책' }, { en: 'Opposing the regime was dangerous.', ko: '정권에 반대하는 것은 위험했다.', usage: '위험' }] },
+      { w: 'ideology', p: '/ˌaɪdiˈɑːlədʒi/', d: 'advanced', k: '이데올로기, 이념', c: 'war', s: 'belief system, doctrine', a: 'pragmatism, openness', ex: [{ en: 'Nazi ideology was based on hate.', ko: '나치 이데올로기는 증오에 기반했다.', usage: '역사' }, { en: 'Ideology justified persecution.', ko: '이데올로기가 박해를 정당화했다.', usage: '역할' }, { en: 'They rejected the ideology.', ko: '그들은 그 이데올로기를 거부했다.', usage: '저항' }] },
+      { w: 'propaganda', p: '/ˌprɑːpəˈɡændə/', d: 'important', k: '선전, 선동', c: 'war', s: 'misinformation, persuasion', a: 'truth, facts', ex: [{ en: 'Propaganda spread lies about Jews.', ko: '선전이 유대인에 대한 거짓말을 퍼뜨렸다.', usage: '나치' }, { en: 'People believed the propaganda.', ko: '사람들은 선전을 믿었다.', usage: '영향' }, { en: 'Resisting propaganda required critical thinking.', ko: '선전에 저항하려면 비판적 사고가 필요했다.', usage: '대응' }] },
+      { w: 'discriminate', p: '/dɪˈskrɪmɪneɪt/', d: 'important', k: '차별하다', c: 'action', s: 'segregate, treat unfairly', a: 'treat equally, include', ex: [{ en: 'Laws discriminated against Jews.', ko: '법이 유대인을 차별했다.', usage: '역사' }, { en: 'To discriminate is to deny dignity.', ko: '차별하는 것은 존엄을 부정하는 것이다.', usage: '도덕' }, { en: 'They refused to discriminate.', ko: '그들은 차별하기를 거부했다.', usage: '저항' }] },
+      { w: 'segregate', p: '/ˈseɡrɪɡeɪt/', d: 'advanced', k: '분리하다, 격리하다', c: 'action', s: 'separate, isolate', a: 'integrate, include', ex: [{ en: 'Jews were segregated from society.', ko: '유대인들은 사회에서 격리되었다.', usage: '나치' }, { en: 'Segregation made escape harder.', ko: '격리가 탈출을 더 어렵게 했다.', usage: '결과' }, { en: 'They resisted segregation.', ko: '그들은 격리에 저항했다.', usage: '저항' }] },
+      { w: 'round up', p: '/raʊnd ʌp/', d: 'important', k: '일제히 붙잡다, 검거하다', c: 'action', s: 'arrest en masse, gather', a: 'release, disperse', ex: [{ en: 'Soldiers rounded up Jewish families.', ko: '병사들이 유대인 가족들을 일제히 붙잡았다.', usage: '나치' }, { en: 'They were rounded up at dawn.', ko: '그들은 새벽에 검거되었다.', usage: '수동태' }, { en: 'Roundups increased fear.', ko: '검거가 공포를 키웠다.', usage: '영향' }] },
+      { w: 'confiscate', p: '/ˈkɑːnfɪskeɪt/', d: 'advanced', k: '압수하다, 몰수하다', c: 'action', s: 'seize, take', a: 'return, give back', ex: [{ en: 'The Nazis confiscated Jewish property.', ko: '나치가 유대인 재산을 압수했다.', usage: '역사' }, { en: 'Confiscation left families with nothing.', ko: '압수로 가족들은 아무것도 남지 않았다.', usage: '결과' }, { en: 'They hid valuables from confiscation.', ko: '그들은 압수를 피해 귀중품을 숨겼다.', usage: '대응' }] },
+      { w: 'treason', p: '/ˈtriːzn/', d: 'advanced', k: '반역, 매국', c: 'war', s: 'betrayal, disloyalty', a: 'loyalty, patriotism', ex: [{ en: 'Helping Jews was considered treason.', ko: '유대인을 돕는 것은 반역으로 간주되었다.', usage: '나치' }, { en: 'Treason was punishable by death.', ko: '반역은 사형에 처해졌다.', usage: '법' }, { en: 'They committed treason to save lives.', ko: '그들은 생명을 구하기 위해 반역을 저질렀다.', usage: '도덕적 역설' }] },
+      { w: 'conscience', p: '/ˈkɑːnʃəns/', d: 'important', k: '양심', c: 'character', s: 'moral sense, integrity', a: 'guiltlessness, immorality', ex: [{ en: 'Her conscience would not let her stay silent.', ko: '그녀의 양심이 침묵하게 두지 않았다.', usage: '도덕' }, { en: 'They acted according to conscience.', ko: '그들은 양심에 따라 행동했다.', usage: '행동' }, { en: 'A clear conscience was rare.', ko: '맑은 양심은 드물었다.', usage: '시대' }] },
+      { w: 'integrity', p: '/ɪnˈteɡrəti/', d: 'important', k: '진정성, 품성', c: 'character', s: 'honesty, principle', a: 'corruption, dishonesty', ex: [{ en: 'She kept her integrity under pressure.', ko: '그녀는 압박 속에서도 진정성을 지켰다.', usage: '시험' }, { en: 'Integrity meant doing the right thing.', ko: '품성은 옳은 일을 하는 것을 의미했다.', usage: '정의' }, { en: 'They admired his integrity.', ko: '그들은 그의 품성을 존경했다.', usage: '칭찬' }] },
+      { w: 'solidarity', p: '/ˌsɑːlɪˈdærəti/', d: 'advanced', k: '연대', c: 'character', s: 'unity, support', a: 'division, betrayal', ex: [{ en: 'Solidarity among neighbors saved lives.', ko: '이웃 간의 연대가 생명을 구했다.', usage: '역할' }, { en: 'They showed solidarity with the persecuted.', ko: '그들은 박해받는 이들과 연대했다.', usage: '행동' }, { en: 'Solidarity was their strength.', ko: '연대가 그들의 힘이었다.', usage: '가치' }] },
+      { w: 'humanity', p: '/hjuːˈmænəti/', d: 'important', k: '인간성, 인류', c: 'character', s: 'humaneness, compassion', a: 'cruelty, inhumanity', ex: [{ en: 'They showed humanity in dark times.', ko: '그들은 어두운 시대에 인간성을 보여주었다.', usage: '가치' }, { en: 'Humanity was under attack.', ko: '인간성이 공격받고 있었다.', usage: '전쟁' }, { en: 'To preserve humanity was to resist.', ko: '인간성을 지키는 것이 저항하는 것이었다.', usage: '저항' }] },
+      { w: 'dignified', p: '/ˈdɪɡnɪfaɪd/', d: 'advanced', k: '품위 있는, 당당한', c: 'character', s: 'composed, noble', a: 'undignified, shameful', ex: [{ en: 'She remained dignified under pressure.', ko: '그녀는 압박 속에서도 품위를 유지했다.', usage: '행동' }, { en: 'A dignified response to hatred.', ko: '증오에 대한 당당한 대응.', usage: '태도' }, { en: 'They died dignified.', ko: '그들은 품위 있게 죽었다.', usage: '기억' }] },
+      { w: 'mourn', p: '/mɔːrn/', d: 'important', k: '애도하다, 슬퍼하다', c: 'emotion', s: 'grieve, lament', a: 'celebrate, rejoice', ex: [{ en: 'They mourned the lost.', ko: '그들은 잃은 이를 애도했다.', usage: '감정' }, { en: 'Mourning was done in secret.', ko: '애도는 비밀리에 이뤄졌다.', usage: '상황' }, { en: 'We must mourn so we remember.', ko: '기억하기 위해 우리는 애도해야 한다.', usage: '기억' }] },
+      { w: 'legacy', p: '/ˈleɡəsi/', d: 'important', k: '유산, 남긴 것', c: 'emotion', s: 'heritage, inheritance', a: 'oblivion, erasure', ex: [{ en: 'The legacy of the Holocaust must be taught.', ko: '홀로코스트의 유산은 가르쳐져야 한다.', usage: '교육' }, { en: 'Survivors left a legacy of courage.', ko: '생존자들은 용기의 유산을 남겼다.', usage: '가치' }, { en: 'We carry their legacy forward.', ko: '우리는 그들의 유산을 이어간다.', usage: '기억' }] },
+      { w: 'remembrance', p: '/rɪˈmembrəns/', d: 'advanced', k: '기억, 추모', c: 'emotion', s: 'memory, commemoration', a: 'forgetting, neglect', ex: [{ en: 'Remembrance keeps history alive.', ko: '기억이 역사를 살아있게 한다.', usage: '역할' }, { en: 'A day of remembrance.', ko: '추모의 날.', usage: '기념' }, { en: 'We honor them through remembrance.', ko: '우리는 기억을 통해 그들을 기린다.', usage: '존중' }] },
+      { w: 'fierce', p: '/fɪrs/', d: 'basic', k: '사나운, 맹렬한', c: 'character', s: 'intense, violent', a: 'gentle, mild', ex: [{ en: 'She had a fierce determination.', ko: '그녀는 맹렬한 결의를 가졌다.', usage: '의지' }, { en: 'The fighting was fierce.', ko: '전투가 격렬했다.', usage: '전쟁' }, { en: 'Fierce loyalty bound them.', ko: '맹렬한 충성심이 그들을 묶었다.', usage: '관계' }] },
+      { w: 'desperate', p: '/ˈdespərət/', d: 'important', k: '절박한, 필사적인', c: 'emotion', s: 'hopeless, urgent', a: 'calm, hopeful', ex: [{ en: 'They were desperate to escape.', ko: '그들은 탈출에 절박했다.', usage: '상황' }, { en: 'Desperate times called for desperate measures.', ko: '절박한 때에는 절박한 수단이 필요했다.', usage: '속담' }, { en: 'She gave a desperate look.', ko: '그녀는 절박한 눈빛을 주었다.', usage: '표현' }] },
+      { w: 'stunned', p: '/stʌnd/', d: 'basic', k: '멍한, 충격받은', c: 'emotion', s: 'shocked, dazed', a: 'calm, composed', ex: [{ en: 'They were stunned by the news.', ko: '그들은 그 소식에 충격받았다.', usage: '반응' }, { en: 'She stood stunned in silence.', ko: '그녀는 멍하니 침묵 속에 서 있었다.', usage: '상태' }, { en: 'The stunned crowd did not move.', ko: '충격받은 군중이 움직이지 않았다.', usage: '집단' }] },
+      { w: 'tremble', p: '/ˈtrembl/', d: 'basic', k: '떨다, 전율하다', c: 'action', s: 'shake, quiver', a: 'steady, calm', ex: [{ en: 'She trembled with fear.', ko: '그녀는 두려움에 떨었다.', usage: '감정' }, { en: 'His hands trembled as he spoke.', ko: '그가 말할 때 그의 손이 떨렸다.', usage: '신체' }, { en: 'The ground trembled from boots.', ko: '땅이 군화 소리에 떨렸다.', usage: '소리' }] },
+      { w: 'clutch', p: '/klʌtʃ/', d: 'basic', k: '꽉 잡다, 움켜쥐다', c: 'action', s: 'grip, hold', a: 'release, let go', ex: [{ en: 'She clutched her sister\'s hand.', ko: '그녀는 동생의 손을 꽉 잡았다.', usage: '보호' }, { en: 'He clutched the papers tightly.', ko: '그는 서류를 꽉 움켜쥐었다.', usage: '소지' }, { en: 'Clutching hope was all they could do.', ko: '희망을 움켜쥐는 것이 그들이 할 수 있는 전부였다.', usage: '희망' }] },
+      { w: 'stumble', p: '/ˈstʌmbl/', d: 'basic', k: '비틀거리다, 걸려 넘어지다', c: 'action', s: 'trip, falter', a: 'stride, steady', ex: [{ en: 'She stumbled in the dark.', ko: '그녀는 어둠 속에서 비틀거렸다.', usage: '이동' }, { en: 'They stumbled toward the coast.', ko: '그들은 해안을 향해 비틀거리며 갔다.', usage: '탈출' }, { en: 'He stumbled over his words.', ko: '그는 말을 더듬었다.', usage: '말' }] },
+      { w: 'huddle', p: '/ˈhʌdl/', d: 'basic', k: '움츠리다, 바짝 붙다', c: 'action', s: 'crowd together, cluster', a: 'spread out, separate', ex: [{ en: 'The family huddled in the corner.', ko: '가족은 구석에 움츠려 있었다.', usage: '두려움' }, { en: 'They huddled for warmth.', ko: '그들은 따뜻함을 위해 바짝 붙었다.', usage: '필요' }, { en: 'Huddling made them less visible.', ko: '움츠리면 덜 눈에 띄었다.', usage: '숨기기' }] },
+      { w: 'stare', p: '/ster/', d: 'basic', k: '응시하다, 빤히 보다', c: 'action', s: 'gaze, look fixedly', a: 'glance away, ignore', ex: [{ en: 'Soldiers stared at passersby.', ko: '병사들이 지나가는 사람들을 응시했다.', usage: '위협' }, { en: 'She dared not stare back.', ko: '그녀는 돌아다보지 못했다.', usage: '두려움' }, { en: 'His stare was cold.', ko: '그의 시선은 차가웠다.', usage: '묘사' }] },
+      { w: 'glance', p: '/ɡlæns/', d: 'basic', k: '흘끗 보다, 한눈에 보다', c: 'action', s: 'peek, look briefly', a: 'stare, gaze', ex: [{ en: 'She glanced over her shoulder.', ko: '그녀는 어깨 너머로 흘끗 봤다.', usage: '불안' }, { en: 'A quick glance could reveal danger.', ko: '빠른 한눈에 위험이 드러날 수 있었다.', usage: '경계' }, { en: 'They exchanged a glance.', ko: '그들은 눈길을 교환했다.', usage: '의사소통' }] },
+      { w: 'weep', p: '/wiːp/', d: 'basic', k: '울다, 눈물을 흘리다', c: 'emotion', s: 'cry, sob', a: 'laugh, rejoice', ex: [{ en: 'She wept in private.', ko: '그녀는 남몰래 울었다.', usage: '숨김' }, { en: 'They wept for the lost.', ko: '그들은 잃은 이를 위해 울었다.', usage: '슬픔' }, { en: 'Weeping was dangerous in public.', ko: '공개적으로 울기는 위험했다.', usage: '상황' }] },
+      { w: 'embrace', p: '/ɪmˈbreɪs/', d: 'basic', k: '포옹하다, 껴안다', c: 'action', s: 'hug, hold', a: 'push away, reject', ex: [{ en: 'They embraced before parting.', ko: '그들은 헤어지기 전 포옹했다.', usage: '이별' }, { en: 'She embraced her child tightly.', ko: '그녀는 아이를 꽉 껴안았다.', usage: '보호' }, { en: 'Embrace was their only comfort.', ko: '포옹이 그들의 유일한 위안이었다.', usage: '위로' }] },
+      { w: 'reunion', p: '/riːˈjuːniən/', d: 'important', k: '재회, 다시 만남', c: 'emotion', s: 'meeting again, gathering', a: 'separation, parting', ex: [{ en: 'They hoped for a reunion after the war.', ko: '그들은 전쟁 후 재회를 희망했다.', usage: '희망' }, { en: 'The reunion was tearful.', ko: '재회는 눈물겨웠다.', usage: '감정' }, { en: 'Many never had a reunion.', ko: '많은 이들은 재회하지 못했다.', usage: '비극' }] },
+      { w: 'orphan', p: '/ˈɔːrfn/', d: 'important', k: '고아', c: 'setting', s: 'parentless child', a: 'child with parents', ex: [{ en: 'The war left many orphans.', ko: '전쟁이 많은 고아를 남겼다.', usage: '결과' }, { en: 'Orphans were often hidden too.', ko: '고아들도 종종 숨겨졌다.', usage: '보호' }, { en: 'She took in an orphan.', ko: '그녀는 고아를 받아들였다.', usage: '자비' }] },
+      { w: 'widow', p: '/ˈwɪdoʊ/', d: 'basic', k: '미망인, 과부', c: 'setting', s: 'woman who lost spouse', a: 'wife with husband', ex: [{ en: 'Many women became widows.', ko: '많은 여성들이 미망인이 되었다.', usage: '전쟁' }, { en: 'The widow lived alone.', ko: '그 미망인은 혼자 살았다.', usage: '상황' }, { en: 'Widows and orphans needed help.', ko: '미망인과 고아는 도움이 필요했다.', usage: '필요' }] },
+      { w: 'rationing', p: '/ˈræʃnɪŋ/', d: 'important', k: '배급제', c: 'war', s: 'allocation, limits', a: 'abundance, plenty', ex: [{ en: 'Rationing made food scarce.', ko: '배급제로 식량이 부족해졌다.', usage: '전쟁' }, { en: 'They lived under rationing.', ko: '그들은 배급제 아래에서 살았다.', usage: '일상' }, { en: 'Rationing lasted years.', ko: '배급제는 수년간 지속되었다.', usage: '기간' }] },
+      { w: 'shortage', p: '/ˈʃɔːrtɪdʒ/', d: 'basic', k: '부족, 결핍', c: 'setting', s: 'lack, scarcity', a: 'surplus, abundance', ex: [{ en: 'There was a shortage of everything.', ko: '모든 것이 부족했다.', usage: '전쟁' }, { en: 'Food shortages were common.', ko: '식량 부족이 흔했다.', usage: '일상' }, { en: 'Shortages increased fear.', ko: '부족이 공포를 키웠다.', usage: '영향' }] },
+      { w: 'black market', p: '/blæk ˈmɑːrkɪt/', d: 'important', k: '암시장', c: 'war', s: 'illegal trade, underground', a: 'legal market', ex: [{ en: 'They bought food on the black market.', ko: '그들은 암시장에서 식량을 샀다.', usage: '생존' }, { en: 'The black market was dangerous.', ko: '암시장은 위험했다.', usage: '위험' }, { en: 'Black market prices were high.', ko: '암시장 가격은 높았다.', usage: '경제' }] },
+      { w: 'identity', p: '/aɪˈdentəti/', d: 'important', k: '정체성, 신원', c: 'character', s: 'who one is, self', a: 'anonymity', ex: [{ en: 'They had to hide their identity.', ko: '그들은 정체성을 숨겨야 했다.', usage: '생존' }, { en: 'Jewish identity was dangerous.', ko: '유대인 정체성은 위험했다.', usage: '박해' }, { en: 'She kept her identity secret.', ko: '그녀는 자신의 신원을 비밀로 했다.', usage: '비밀' }] },
+      { w: 'disguise', p: '/dɪsˈɡaɪz/', d: 'important', k: '변장 (하다)', c: 'action', s: 'mask, hide identity', a: 'reveal, show', ex: [{ en: 'They escaped in disguise.', ko: '그들은 변장하고 탈출했다.', usage: '탈출' }, { en: 'Disguise could save lives.', ko: '변장이 생명을 구할 수 있었다.', usage: '역할' }, { en: 'She wore a disguise.', ko: '그녀는 변장을 했다.', usage: '행동' }] },
+      { w: 'forbidden', p: '/fərˈbɪdn/', d: 'basic', k: '금지된', c: 'setting', s: 'prohibited, banned', a: 'allowed, permitted', ex: [{ en: 'It was forbidden to help Jews.', ko: '유대인을 돕는 것은 금지되어 있었다.', usage: '법' }, { en: 'They entered the forbidden zone.', ko: '그들은 금지 구역에 들어갔다.', usage: '위험' }, { en: 'Forbidden books were hidden.', ko: '금지된 책들은 숨겨졌다.', usage: '저항' }] },
+      { w: 'obey', p: '/əˈbeɪ/', d: 'basic', k: '복종하다, 따르다', c: 'action', s: 'comply, follow', a: 'disobey, resist', ex: [{ en: 'They had to obey the soldiers.', ko: '그들은 병사들에게 복종해야 했다.', usage: '강제' }, { en: 'She refused to obey unjust laws.', ko: '그녀는 부당한 법에 복종하기를 거부했다.', usage: '저항' }, { en: 'Obey or face punishment.', ko: '복종하거나 처벌을 받아라.', usage: '명령' }] },
+      { w: 'rebel', p: '/ˈrebl/', d: 'important', k: '반역자, 반란군 / 반항하다', c: 'action', s: 'resister, defy', a: 'obey, comply', ex: [{ en: 'Rebels helped the underground.', ko: '반란군이 지하 조직을 도왔다.', usage: '역할' }, { en: 'To rebel was to risk death.', ko: '반항하는 것은 죽음을 무릅쓰는 것이었다.', usage: '위험' }, { en: 'She rebelled in small ways.', ko: '그녀는 작은 방식으로 반항했다.', usage: '저항' }] },
+      { w: 'conspiracy', p: '/kənˈspɪrəsi/', d: 'advanced', k: '음모, 공모', c: 'war', s: 'plot, secret plan', a: 'open action', ex: [{ en: 'They were part of a conspiracy to save Jews.', ko: '그들은 유대인을 구하기 위한 음모의 일부였다.', usage: '저항' }, { en: 'Conspiracy could mean execution.', ko: '공모는 처형을 의미할 수 있었다.', usage: '위험' }, { en: 'The conspiracy was carefully planned.', ko: '그 음모는 신중히 계획되었다.', usage: '조직' }] },
+      { w: 'code', p: '/koʊd/', d: 'basic', k: '암호, 부호', c: 'setting', s: 'cipher, signal', a: 'plain language', ex: [{ en: 'They communicated in code.', ko: '그들은 암호로 소통했다.', usage: '비밀' }, { en: 'A code word meant danger.', ko: '암호 단어가 위험을 의미했다.', usage: '경고' }, { en: 'Breaking the code was fatal.', ko: '암호가 새나가면 치명적이었다.', usage: '위험' }] },
+      { w: 'signal', p: '/ˈsɪɡnəl/', d: 'basic', k: '신호 (하다)', c: 'action', s: 'sign, gesture', a: 'no signal', ex: [{ en: 'She gave the signal to go.', ko: '그녀가 가라는 신호를 했다.', usage: '탈출' }, { en: 'Signals had to be subtle.', ko: '신호는 미묘해야 했다.', usage: '비밀' }, { en: 'A wrong signal could betray them.', ko: '잘못된 신호가 그들을 배반할 수 있었다.', usage: '위험' }] },
+      { w: 'coast', p: '/koʊst/', d: 'basic', k: '해안, 바닷가', c: 'setting', s: 'shore, seaboard', a: 'inland', ex: [{ en: 'They fled to the coast.', ko: '그들은 해안으로 도망쳤다.', usage: '탈출' }, { en: 'The coast meant Sweden and safety.', ko: '해안은 스웨덴과 안전을 의미했다.', usage: '희망' }, { en: 'Boats waited at the coast.', ko: '배들이 해안에서 기다렸다.', usage: '구조' }] },
+      { w: 'harbor', p: '/ˈhɑːrbər/', d: 'important', k: '항구, 피난처', c: 'setting', s: 'port, haven', a: 'open sea', ex: [{ en: 'The harbor was watched.', ko: '항구는 감시되고 있었다.', usage: '위험' }, { en: 'They left from a small harbor.', ko: '그들은 작은 항구에서 출발했다.', usage: '탈출' }, { en: 'The house was a harbor of safety.', ko: '그 집은 안전의 피난처였다.', usage: '은유' }] },
+      { w: 'boat', p: '/boʊt/', d: 'basic', k: '배, 보트', c: 'setting', s: 'vessel, ship', a: 'land', ex: [{ en: 'They crossed to Sweden by boat.', ko: '그들은 배로 스웨덴을 건넜다.', usage: '탈출' }, { en: 'The boat was small and crowded.', ko: '배는 작고 붐볐다.', usage: '조건' }, { en: 'Fishermen provided boats.', ko: '어부들이 배를 제공했다.', usage: '도움' }] },
+      { w: 'darkness', p: '/ˈdɑːrknəs/', d: 'basic', k: '어둠, 암흑', c: 'setting', s: 'dark, night', a: 'light, day', ex: [{ en: 'They moved under cover of darkness.', ko: '그들은 어둠을 엄호로 움직였다.', usage: '탈출' }, { en: 'Darkness hid them.', ko: '어둠이 그들을 숨겨주었다.', usage: '보호' }, { en: 'The darkness of the era.', ko: '그 시대의 암흑.', usage: '은유' }] },
+      { w: 'dawn', p: '/dɔːn/', d: 'basic', k: '새벽, 여명', c: 'setting', s: 'sunrise, daybreak', a: 'dusk, sunset', ex: [{ en: 'They left at dawn.', ko: '그들은 새벽에 출발했다.', usage: '시간' }, { en: 'Dawn brought danger of discovery.', ko: '새벽이 들킬 위험을 가져왔다.', usage: '위험' }, { en: 'After the war, a new dawn came.', ko: '전쟁 후 새로운 새벽이 왔다.', usage: '희망' }] },
+      { w: 'dusk', p: '/dʌsk/', d: 'basic', k: '땅거미, 황혼', c: 'setting', s: 'twilight, sunset', a: 'dawn, sunrise', ex: [{ en: 'Curfew began at dusk.', ko: '통행 금지는 땅거미에 시작되었다.', usage: '규칙' }, { en: 'They traveled at dusk.', ko: '그들은 땅거미에 이동했다.', usage: '숨기기' }, { en: 'By dusk they were safe.', ko: '땅거미가 될 때쯤 그들은 안전했다.', usage: '도착' }] },
+      { w: 'cellar', p: '/ˈselər/', d: 'basic', k: '지하실', c: 'setting', s: 'basement, underground', a: 'attic', ex: [{ en: 'They hid in the cellar.', ko: '그들은 지하실에 숨었다.', usage: '숨김' }, { en: 'The cellar was cold and dark.', ko: '지하실은 추고 어두웠다.', usage: '조건' }, { en: 'Cellars became hiding places.', ko: '지하실이 숨는 곳이 되었다.', usage: '역할' }] },
+      { w: 'attic', p: '/ˈætɪk/', d: 'basic', k: '다락방', c: 'setting', s: 'loft, top floor', a: 'cellar', ex: [{ en: 'Refugees hid in the attic.', ko: '난민들이 다락방에 숨었다.', usage: '숨김' }, { en: 'The attic had a secret entrance.', ko: '다락방에는 비밀 입구가 있었다.', usage: '구조' }, { en: 'They stayed in the attic for weeks.', ko: '그들은 몇 주간 다락방에 머물렀다.', usage: '기간' }] },
+      { w: 'soldier', p: '/ˈsoʊldʒər/', d: 'basic', k: '병사, 군인', c: 'war', s: 'troop, military', a: 'civilian', ex: [{ en: 'Soldiers patrolled the streets.', ko: '병사들이 거리를 순찰했다.', usage: '점령' }, { en: 'She avoided the soldiers.', ko: '그녀는 병사들을 피했다.', usage: '반응' }, { en: 'Some soldiers showed mercy.', ko: '일부 병사들은 자비를 보였다.', usage: '인간성' }] },
+      { w: 'Nazi', p: '/ˈnɑːtsi/', d: 'important', k: '나치 (독일 국사회주의자)', c: 'war', s: 'German occupier', a: 'resister, ally', ex: [{ en: 'The Nazis occupied Denmark.', ko: '나치가 덴마크를 점령했다.', usage: '역사' }, { en: 'Nazi laws targeted Jews.', ko: '나치 법이 유대인을 겨냥했다.', usage: '박해' }, { en: 'They feared the Nazis.', ko: '그들은 나치를 두려워했다.', usage: '공포' }] },
+      { w: 'Jew', p: '/dʒuː/', d: 'basic', k: '유대인', c: 'setting', s: 'Jewish person', a: '', ex: [{ en: 'Jews were forced to wear the star.', ko: '유대인들은 별을 달도록 강요받았다.', usage: '박해' }, { en: 'Many Jews went into hiding.', ko: '많은 유대인들이 숨었다.', usage: '생존' }, { en: 'Denmark helped save its Jews.', ko: '덴마크는 자국 유대인을 구하는 것을 도왔다.', usage: '역사' }] },
+      { w: 'Jewish', p: '/ˈdʒuːɪʃ/', d: 'basic', k: '유대인의', c: 'setting', s: 'of Jews', a: '', ex: [{ en: 'Jewish families were in danger.', ko: '유대인 가족들이 위험에 처했다.', usage: '상황' }, { en: 'They had Jewish friends.', ko: '그들에게는 유대인 친구들이 있었다.', usage: '관계' }, { en: 'Jewish identity was a death sentence.', ko: '유대인 정체성은 사형 선고나 다름없었다.', usage: '박해' }] },
+      { w: 'Danish', p: '/ˈdeɪnɪʃ/', d: 'basic', k: '덴마크의, 덴마크인', c: 'setting', s: 'of Denmark', a: '', ex: [{ en: 'The Danish resistance was brave.', ko: '덴마크 저항군은 용감했다.', usage: '역할' }, { en: 'Danish people helped their neighbors.', ko: '덴마크 사람들이 이웃을 도왔다.', usage: '도움' }, { en: 'She was Danish.', ko: '그녀는 덴마크인이었다.', usage: '정체성' }] },
+      { w: 'Sweden', p: '/ˈswiːdn/', d: 'basic', k: '스웨덴', c: 'setting', s: 'neutral country', a: '', ex: [{ en: 'They escaped to Sweden.', ko: '그들은 스웨덴으로 탈출했다.', usage: '목적지' }, { en: 'Sweden offered refuge.', ko: '스웨덴이 피난처를 제공했다.', usage: '역할' }, { en: 'The boat sailed to Sweden.', ko: '배가 스웨덴으로 항해했다.', usage: '탈출' }] },
+      { w: 'Germany', p: '/ˈdʒɜːrməni/', d: 'basic', k: '독일', c: 'war', s: 'Nazi Germany', a: 'Allies', ex: [{ en: 'Germany invaded in 1940.', ko: '독일이 1940년 침략했다.', usage: '역사' }, { en: 'German forces occupied the country.', ko: '독일 군대가 그 나라를 점령했다.', usage: '점령' }, { en: 'Germany was defeated in 1945.', ko: '독일은 1945년 패배했다.', usage: '역사' }] },
+      { w: 'war', p: '/wɔːr/', d: 'basic', k: '전쟁', c: 'war', s: 'conflict, battle', a: 'peace', ex: [{ en: 'The war changed everything.', ko: '전쟁이 모든 것을 바꿨다.', usage: '영향' }, { en: 'They lived through the war.', ko: '그들은 전쟁을 겪으며 살았다.', usage: '경험' }, { en: 'When the war ended, they rejoiced.', ko: '전쟁이 끝났을 때 그들은 기뻐했다.', usage: '해방' }] },
+      { w: 'peace', p: '/piːs/', d: 'basic', k: '평화', c: 'war', s: 'calm, no war', a: 'war, conflict', ex: [{ en: 'They longed for peace.', ko: '그들은 평화를 갈망했다.', usage: '희망' }, { en: 'Peace seemed far away.', ko: '평화는 멀게 느껴졌다.', usage: '절망' }, { en: 'After the war, peace returned.', ko: '전쟁 후 평화가 돌아왔다.', usage: '회복' }] },
+      { w: 'number', p: '/ˈnʌmbər/', d: 'basic', k: '세다, 번호를 매기다', c: 'action', s: 'count, enumerate', a: 'uncount', ex: [{ en: 'Can you number the stars?', ko: '당신은 별을 셀 수 있나요?', usage: '책 제목 연상' }, { en: 'They could not number the lost.', ko: '그들은 잃은 이들을 다 셀 수 없었다.', usage: '비극' }, { en: 'Number the days until freedom.', ko: '자유까지의 날을 세어라.', usage: '희망' }] },
+      { w: 'star', p: '/stɑːr/', d: 'basic', k: '별', c: 'setting', s: 'celestial body', a: '', ex: [{ en: 'The stars gave hope at night.', ko: '별들이 밤에 희망을 주었다.', usage: '상징' }, { en: 'She looked at the stars.', ko: '그녀는 별을 바라봤다.', usage: '위로' }, { en: 'Number the stars—so many.', ko: '별을 세어 보라, 너무 많다.', usage: '책 제목' }] }
+    ];
+
+    // --- WORD DATA: Chip War (100 words) ---
+    const CHIP_WAR_WORDS = [
+      { w: 'semiconductor', p: '/ˌsemɪkənˈdʌktər/', d: 'important', k: '반도체 (전기 전도성이 조건에 따라 변하는 물질)', c: 'technology', s: 'chip, microchip', a: 'conductor, insulator', ex: [{ en: 'Taiwan dominates semiconductor manufacturing.', ko: '대만이 반도체 제조를 지배한다.', usage: '전자 산업' }, { en: 'Semiconductor shortages affected cars.', ko: '반도체 부족이 자동차에 영향을 미쳤다.', usage: '공급망' }, { en: 'The semiconductor industry is strategic.', ko: '반도체 산업은 전략적이다.', usage: '경쟁력' }] },
+      { w: 'wafer', p: '/ˈweɪfər/', d: 'important', k: '웨이퍼 (반도체 회로가 새겨지는 얇은 원형 실리콘 판)', c: 'technology', s: 'silicon disk', a: '', ex: [{ en: 'Chips are built on silicon wafers.', ko: '칩은 실리콘 웨이퍼 위에 만들어진다.', usage: '제조' }, { en: 'Wafer size affects productivity.', ko: '웨이퍼 크기가 생산성에 영향을 준다.', usage: '제조' }, { en: 'A single wafer holds hundreds of chips.', ko: '웨이퍼 한 장에 수백 개의 칩이 들어간다.', usage: '규모' }] },
+      { w: 'transistor', p: '/trænˈzɪstər/', d: 'important', k: '트랜지스터 (전자 스위치·증폭 소자)', c: 'technology', s: 'switch, component', a: '', ex: [{ en: 'More transistors mean more computing power.', ko: '트랜지스터가 많을수록 연산 능력이 커진다.', usage: '성능' }, { en: 'The transistor revolutionized electronics.', ko: '트랜지스터가 전자 공학을 혁신했다.', usage: '역사' }, { en: 'Billions of transistors fit on one chip.', ko: '한 칩에 수십억 개의 트랜지스터가 들어간다.', usage: '규모' }] },
+      { w: 'lithography', p: '/lɪˈθɒɡrəfi/', d: 'advanced', k: '리소그래피 (패턴을 웨이퍼에 새기는 공정)', c: 'technology', s: 'patterning, printing', a: '', ex: [{ en: 'EUV lithography enables the smallest chips.', ko: 'EUV 리소그래피가 가장 작은 칩을 가능하게 한다.', usage: '기술' }, { en: 'Lithography defines chip features.', ko: '리소그래피가 칩의 미세 구조를 결정한다.', usage: '역할' }, { en: 'Advanced lithography is extremely expensive.', ko: '고도 리소그래피는 극도로 비싸다.', usage: '비용' }] },
+      { w: 'EUV', p: '/ˌiː juː ˈviː/', d: 'advanced', k: '극자외선 (Extreme Ultraviolet, 최첨단 노광 기술)', c: 'technology', s: 'extreme ultraviolet', a: '', ex: [{ en: 'EUV machines are made only by ASML.', ko: 'EUV 장비는 ASML만 만든다.', usage: '독점' }, { en: 'EUV enables 3nm and below.', ko: 'EUV가 3나노 이하를 가능하게 한다.', usage: '미세화' }, { en: 'EUV lithography is a bottleneck.', ko: 'EUV 리소그래피가 병목이다.', usage: '공급망' }] },
+      { w: 'fabrication', p: '/ˌfæbrɪˈkeɪʃn/', d: 'important', k: '제조, 파운드리 공정', c: 'technology', s: 'manufacturing, production', a: 'design only', ex: [{ en: 'Chip fabrication requires clean rooms.', ko: '칩 제조에는 클린룸이 필요하다.', usage: '환경' }, { en: 'Fabrication is concentrated in Asia.', ko: '제조는 아시아에 집중되어 있다.', usage: '지리' }, { en: 'Advanced fabrication costs billions.', ko: '고도 제조에는 수십억이 든다.', usage: '비용' }] },
+      { w: 'foundry', p: '/ˈfaʊndri/', d: 'important', k: '파운드리 (다른 회사용 칩을 대신 제조하는 회사)', c: 'business', s: 'chip maker for others', a: 'fabless', ex: [{ en: 'TSMC is the world\'s largest foundry.', ko: 'TSMC는 세계 최대 파운드리다.', usage: '기업' }, { en: 'Foundries make chips for Apple and Qualcomm.', ko: '파운드리들이 애플·퀄컴용 칩을 만든다.', usage: '역할' }, { en: 'Building a foundry takes years.', ko: '파운드리 건설에는 수 년이 걸린다.', usage: '시간' }] },
+      { w: 'fabless', p: '/ˈfæbləs/', d: 'advanced', k: '팹리스 (칩 설계만 하고 제조는 외주)', c: 'business', s: 'design-only company', a: 'IDM, foundry', ex: [{ en: 'Qualcomm and AMD are fabless.', ko: '퀄컴과 AMD는 팹리스다.', usage: '비즈니스' }, { en: 'Fabless firms depend on foundries.', ko: '팹리스 기업은 파운드리에 의존한다.', usage: '의존' }, { en: 'The fabless model reduced costs.', ko: '팹리스 모델이 비용을 줄였다.', usage: '역사' }] },
+      { w: 'nanometer', p: '/ˈnænoʊˌmiːtər/', d: 'important', k: '나노미터 (10억 분의 1m, 칩 공정 규모 단위)', c: 'technology', s: 'nm, process node', a: '', ex: [{ en: 'Leading chips use 3-nanometer technology.', ko: '최첨단 칩은 3나노미터 기술을 쓴다.', usage: '공정' }, { en: 'Smaller nanometers mean denser chips.', ko: '나노미터가 작을수록 칩 밀도가 높다.', usage: '성능' }, { en: 'The nanometer race never stops.', ko: '나노 경쟁은 멈추지 않는다.', usage: '경쟁' }] },
+      { w: 'Moore\'s Law', p: '/mɔːrz lɔː/', d: 'important', k: '무어의 법칙 (칩 성능이 약 2년마다 2배)', c: 'technology', s: 'scaling trend', a: '', ex: [{ en: 'Moore\'s Law has driven the industry for decades.', ko: '무어의 법칙이 수십 년간 산업을 이끌었다.', usage: '역사' }, { en: 'Some say Moore\'s Law is slowing.', ko: '일부는 무어의 법칙이 둔화한다고 한다.', usage: '논쟁' }, { en: 'Keeping Moore\'s Law alive costs more.', ko: '무어의 법칙을 유지하는 비용이 커진다.', usage: '경제' }] },
+      { w: 'TSMC', p: '/ˌtiː es em ˈsiː/', d: 'important', k: '대만 반도체 제조 회사 (Taiwan Semiconductor)', c: 'business', s: 'Taiwan Semiconductor', a: '', ex: [{ en: 'TSMC makes most advanced chips for Apple.', ko: 'TSMC가 애플용 최첨단 칩 대부분을 만든다.', usage: '역할' }, { en: 'TSMC is in the crosshairs of geopolitics.', ko: 'TSMC는 지정학의 겨냥 대상이다.', usage: '지정학' }, { en: 'TSMC\'s fabs are mostly in Taiwan.', ko: 'TSMC 파브는 대부분 대만에 있다.', usage: '위치' }] },
+      { w: 'Intel', p: '/ˈɪntel/', d: 'basic', k: '인텔 (미국 CPU·반도체 기업)', c: 'business', s: 'US chip company', a: '', ex: [{ en: 'Intel once dominated PC chips.', ko: '인텔은 한때 PC 칩을 지배했다.', usage: '역사' }, { en: 'Intel is building fabs in the US and EU.', ko: '인텔이 미국과 EU에 파브를 짓고 있다.', usage: '재편' }, { en: 'Intel competes with TSMC and Samsung.', ko: '인텔은 TSMC, 삼성과 경쟁한다.', usage: '경쟁' }] },
+      { w: 'ASML', p: '/ˌeɪ es em ˈel/', d: 'advanced', k: 'ASML (EUV 등 노광 장비 독점 제조사)', c: 'business', s: 'lithography company', a: '', ex: [{ en: 'ASML is the only maker of EUV tools.', ko: 'ASML이 EUV 장비의 유일한 제조사다.', usage: '독점' }, { en: 'ASML is based in the Netherlands.', ko: 'ASML은 네덜란드에 본사가 있다.', usage: '위치' }, { en: 'Without ASML, advanced chips stop.', ko: 'ASML 없이는 고도 칩 제조가 멈춘다.', usage: '중요성' }] },
+      { w: 'Samsung', p: '/ˈsæmsʌŋ/', d: 'basic', k: '삼성 (한국 반도체·전자 기업)', c: 'business', s: 'Korean conglomerate', a: '', ex: [{ en: 'Samsung is a major memory and foundry player.', ko: '삼성은 메모리·파운드리 주요 기업이다.', usage: '역할' }, { en: 'Samsung competes with TSMC in logic.', ko: '삼성은 로직에서 TSMC와 경쟁한다.', usage: '경쟁' }, { en: 'Samsung has fabs in Korea and elsewhere.', ko: '삼성은 한국 등에 파브를 보유한다.', usage: '지리' }] },
+      { w: 'supply chain', p: '/səˈplaɪ tʃeɪn/', d: 'important', k: '공급망 (원자재부터 완제품까지의 흐름)', c: 'business', s: 'value chain, logistics', a: 'disruption', ex: [{ en: 'Chip supply chains span the globe.', ko: '칩 공급망은 전 지구에 퍼져 있다.', usage: '범위' }, { en: 'Supply chain shocks hit automakers.', ko: '공급망 충격이 자동차 업체를 타격했다.', usage: '리스크' }, { en: 'Reshoring shortens supply chains.', ko: '리쇼어링이 공급망을 짧게 한다.', usage: '정책' }] },
+      { w: 'geopolitics', p: '/ˌdʒiːoʊˈpɑːlətɪks/', d: 'important', k: '지정학 (지리·권력·자원이 얽힌 정치)', c: 'politics', s: 'international power', a: 'domestic only', ex: [{ en: 'Chips are at the center of geopolitics.', ko: '칩이 지정학의 중심에 있다.', usage: '역할' }, { en: 'Geopolitics drives export controls.', ko: '지정학이 수출 통제를 이끈다.', usage: '정책' }, { en: 'Taiwan\'s chips make it geopolitically vital.', ko: '대만의 칩이 대만을 지정학적으로 핵심으로 만든다.', usage: '중요성' }] },
+      { w: 'sanctions', p: '/ˈsæŋkʃnz/', d: 'important', k: '제재 (경제·무역 제한)', c: 'politics', s: 'restrictions, penalties', a: 'trade, openness', ex: [{ en: 'US sanctions limit chip tech to China.', ko: '미국 제재가 중국에 대한 칩 기술을 제한한다.', usage: '정책' }, { en: 'Sanctions can block equipment sales.', ko: '제재로 장비 판매가 막힐 수 있다.', usage: '영향' }, { en: 'Sanctions reshape global chip flows.', ko: '제재가 글로벌 칩 흐름을 재편한다.', usage: '결과' }] },
+      { w: 'export control', p: '/ˈekspɔːrt kənˌtroʊl/', d: 'advanced', k: '수출 통제 (특정 기술·제품의 수출 제한)', c: 'politics', s: 'export restriction', a: 'free export', ex: [{ en: 'Export controls target advanced chips.', ko: '수출 통제는 고도 칩을 겨냥한다.', usage: '대상' }, { en: 'Export control lists include EUV.', ko: '수출 통제 목록에 EUV가 포함된다.', usage: '항목' }, { en: 'Export controls are a tool of policy.', ko: '수출 통제는 정책의 수단이다.', usage: '역할' }] },
+      { w: 'rivalry', p: '/ˈraɪvlri/', d: 'important', k: '경쟁, 대립 (국가·기업 간)', c: 'politics', s: 'competition, conflict', a: 'partnership', ex: [{ en: 'US-China rivalry shapes the chip industry.', ko: '미중 경쟁이 칩 산업을 만든다.', usage: '역할' }, { en: 'Rivalry drives investment in fabs.', ko: '경쟁이 파브 투자를 이끈다.', usage: '투자' }, { en: 'Tech rivalry is about national security.', ko: '기술 경쟁은 국가 안보 문제다.', usage: '동기' }] },
+      { w: 'etching', p: '/ˈetʃɪŋ/', d: 'advanced', k: '식각 (회로 패턴을 새기는 공정)', c: 'technology', s: 'pattern transfer', a: '', ex: [{ en: 'Etching removes unwanted material.', ko: '식각은 원하지 않는 부분을 제거한다.', usage: '제조' }, { en: 'Etching follows lithography.', ko: '식각은 리소그래피 다음에 온다.', usage: '순서' }, { en: 'Precision etching is critical.', ko: '정밀 식각이 핵심이다.', usage: '중요성' }] },
+      { w: 'clean room', p: '/kliːn ruːm/', d: 'important', k: '클린룸 (먼지·오염을 극소화한 제조실)', c: 'technology', s: 'fab environment', a: '', ex: [{ en: 'Chip fabs require ultra clean rooms.', ko: '칩 파브에는 초청정 클린룸이 필요하다.', usage: '환경' }, { en: 'Particles in clean rooms kill chips.', ko: '클린룸의 먼지가 칩을 불량으로 만든다.', usage: '품질' }, { en: 'Clean room standards are extreme.', ko: '클린룸 기준은 극도로 엄격하다.', usage: '기준' }] },
+      { w: 'node', p: '/noʊd/', d: 'important', k: '공정 노드 (예: 3nm, 5nm 등 세대)', c: 'technology', s: 'process node, generation', a: '', ex: [{ en: 'The 3nm node is in production.', ko: '3나노 노드가 양산 중이다.', usage: '세대' }, { en: 'Smaller nodes are harder to make.', ko: '작은 노드일수록 제조가 어렵다.', usage: '난이도' }, { en: 'Node names are partly marketing.', ko: '노드 이름은 부분적으로 마케팅이다.', usage: '산업' }] },
+      { w: 'chip', p: '/tʃɪp/', d: 'basic', k: '칩, 반도체 집적 회로', c: 'technology', s: 'microchip, IC', a: '', ex: [{ en: 'Phones and cars need advanced chips.', ko: '휴대폰과 자동차에 고도 칩이 필요하다.', usage: '수요' }, { en: 'A chip contains billions of transistors.', ko: '한 칩에 수십억 개 트랜지스터가 들어간다.', usage: '구성' }, { en: 'Chip design and making are separate.', ko: '칩 설계와 제조는 분리된다.', usage: '산업' }] },
+      { w: 'fab', p: '/fæb/', d: 'important', k: '파브, 반도체 제조 공장', c: 'technology', s: 'factory, fabrication plant', a: '', ex: [{ en: 'A new fab costs over $10 billion.', ko: '새 파브 하나에 100억 달러 이상 든다.', usage: '비용' }, { en: 'Fabs are concentrated in Taiwan and Korea.', ko: '파브는 대만·한국에 집중되어 있다.', usage: '지리' }, { en: 'Building a fab takes years.', ko: '파브 건설에는 수 년이 걸린다.', usage: '기간' }] },
+      { w: 'silicon', p: '/ˈsɪlɪkən/', d: 'basic', k: '실리콘 (반도체 소재)', c: 'technology', s: 'Si, semiconductor material', a: '', ex: [{ en: 'Most chips are made of silicon.', ko: '대부분의 칩은 실리콘으로 만든다.', usage: '소재' }, { en: 'Silicon Valley is named after the material.', ko: '실리콘밸리는 이 소재에서 이름을 땄다.', usage: '역사' }, { en: 'Silicon wafers are the starting point.', ko: '실리콘 웨이퍼가 출발점이다.', usage: '제조' }] },
+      { w: 'design', p: '/dɪˈzaɪn/', d: 'basic', k: '설계 (회로·칩 구조)', c: 'technology', s: 'architecture, layout', a: 'manufacturing', ex: [{ en: 'Chip design is highly specialized.', ko: '칩 설계는 매우 전문적이다.', usage: '역할' }, { en: 'Design and fab are often separate.', ko: '설계와 파브는 종종 분리된다.', usage: '산업' }, { en: 'EDA tools are used for design.', ko: '설계에는 EDA 도구가 쓰인다.', usage: '도구' }] },
+      { w: 'manufacturing', p: '/ˌmænjəˈfæktʃərɪŋ/', d: 'important', k: '제조, 생산', c: 'business', s: 'production, fabrication', a: 'design only', ex: [{ en: 'Manufacturing is concentrated in Asia.', ko: '제조는 아시아에 집중되어 있다.', usage: '지리' }, { en: 'US wants to bring manufacturing back.', ko: '미국은 제조를 다시 불러오려 한다.', usage: '정책' }, { en: 'Advanced manufacturing needs skilled workers.', ko: '고도 제조에는 숙련 인력이 필요하다.', usage: '인력' }] },
+      { w: 'bottleneck', p: '/ˈbɑːtlnek/', d: 'important', k: '병목 (공급·능력의 제한점)', c: 'business', s: 'constraint, choke point', a: 'abundance', ex: [{ en: 'EUV is a bottleneck for advanced chips.', ko: 'EUV가 고도 칩의 병목이다.', usage: '장비' }, { en: 'Bottlenecks caused the chip shortage.', ko: '병목이 칩 부족을 일으켰다.', usage: '원인' }, { en: 'Finding bottlenecks is key to scaling.', ko: '병목을 찾는 것이 확장의 핵심이다.', usage: '전략' }] },
+      { w: 'capacity', p: '/kəˈpæsəti/', d: 'basic', k: '생산 능력, 수용량', c: 'business', s: 'output, capability', a: 'shortage', ex: [{ en: 'Global chip capacity is limited.', ko: '전 세계 칩 생산 능력은 제한적이다.', usage: '공급' }, { en: 'New fabs add capacity.', ko: '새 파브가 생산 능력을 늘린다.', usage: '투자' }, { en: 'Capacity cannot be built overnight.', ko: '생산 능력은 하루아침에 늘 수 없다.', usage: '시간' }] },
+      { w: 'shortage', p: '/ˈʃɔːrtɪdʒ/', d: 'basic', k: '부족', c: 'business', s: 'scarcity, lack', a: 'surplus', ex: [{ en: 'The chip shortage hit automakers.', ko: '칩 부족이 자동차 업체를 타격했다.', usage: '영향' }, { en: 'Shortages pushed up prices.', ko: '부족이 가격을 올렸다.', usage: '경제' }, { en: 'Shortages eased but risks remain.', ko: '부족은 완화됐지만 리스크는 남는다.', usage: '전망' }] },
+      { w: 'subsidy', p: '/ˈsʌbsədi/', d: 'important', k: '보조금, 지원금', c: 'politics', s: 'incentive, support', a: 'tax, penalty', ex: [{ en: 'Governments offer subsidies for fabs.', ko: '정부가 파브에 보조금을 준다.', usage: '정책' }, { en: 'US CHIPS Act provides subsidies.', ko: '미국 CHIPS 법이 보조금을 제공한다.', usage: '법안' }, { en: 'Subsidies aim to reshore manufacturing.', ko: '보조금은 제조 리쇼어링을 목표로 한다.', usage: '목적' }] },
+      { w: 'reshoring', p: '/riːˈʃɔːrɪŋ/', d: 'advanced', k: '리쇼어링 (해외 생산을 본국으로 되가져오기)', c: 'business', s: 'onshoring, bringing back', a: 'offshoring', ex: [{ en: 'Reshoring of chips is a policy goal.', ko: '칩 리쇼어링은 정책 목표다.', usage: '정책' }, { en: 'Reshoring is expensive.', ko: '리쇼어링은 비용이 크다.', usage: '비용' }, { en: 'Reshoring reduces supply chain risk.', ko: '리쇼어링은 공급망 리스크를 줄인다.', usage: '이유' }] },
+      { w: 'decoupling', p: '/diːˈkʌplɪŋ/', d: 'advanced', k: '디커플링 (경제·기술 의존 해소)', c: 'politics', s: 'decoupling, separation', a: 'integration', ex: [{ en: 'US-China tech decoupling is underway.', ko: '미중 기술 디커플링이 진행 중이다.', usage: '정책' }, { en: 'Decoupling reshapes supply chains.', ko: '디커플링이 공급망을 재편한다.', usage: '영향' }, { en: 'Full decoupling is very costly.', ko: '완전 디커플링은 비용이 매우 크다.', usage: '한계' }] },
+      { w: 'dependency', p: '/dɪˈpendənsi/', d: 'important', k: '의존성 (특정 공급원·기술에 의존)', c: 'business', s: 'reliance, dependence', a: 'independence', ex: [{ en: 'Taiwan creates dependency risk.', ko: '대만이 의존성 리스크를 만든다.', usage: '지정학' }, { en: 'Reducing dependency is a goal.', ko: '의존성을 줄이는 것이 목표다.', usage: '전략' }, { en: 'Dependency on single suppliers is dangerous.', ko: '단일 공급자에의 의존은 위험하다.', usage: '리스크' }] },
+      { w: 'monopoly', p: '/məˈnɑːpəli/', d: 'important', k: '독점', c: 'business', s: 'single supplier, dominance', a: 'competition', ex: [{ en: 'ASML has a monopoly on EUV.', ko: 'ASML이 EUV를 독점하고 있다.', usage: '시장' }, { en: 'Monopoly in tools creates vulnerability.', ko: '장비 독점은 취약성을 만든다.', usage: '리스크' }, { en: 'Breaking monopolies is hard.', ko: '독점을 깨는 것은 어렵다.', usage: '현실' }] },
+      { w: 'dual-use', p: '/ˈduːəl juːs/', d: 'advanced', k: '军民两用 (민간·군사 양용)', c: 'politics', s: 'civil and military', a: 'civil only', ex: [{ en: 'Advanced chips are dual-use.', ko: '고도 칩은 민군 양용이다.', usage: '성격' }, { en: 'Dual-use tech faces export controls.', ko: '양용 기술은 수출 통제 대상이다.', usage: '정책' }, { en: 'Dual-use complicates trade.', ko: '양용이 무역을 복잡하게 한다.', usage: '영향' }] },
+      { w: 'national security', p: '/ˈnæʃnəl səˈkjʊrəti/', d: 'important', k: '국가 안보', c: 'politics', s: 'security of the state', a: 'vulnerability', ex: [{ en: 'Chips are a national security issue.', ko: '칩은 국가 안보 이슈다.', usage: '정책' }, { en: 'National security drives export controls.', ko: '국가 안보가 수출 통제를 이끈다.', usage: '동기' }, { en: 'Supply chain = national security.', ko: '공급망이 곧 국가 안보다.', usage: '인식' }] },
+      { w: 'innovation', p: '/ˌɪnəˈveɪʃn/', d: 'basic', k: '혁신, 신기술 도입', c: 'technology', s: 'breakthrough, new tech', a: 'stagnation', ex: [{ en: 'Chip innovation has slowed at the frontier.', ko: '칩 혁신은 최전선에서 둔화했다.', usage: '현황' }, { en: 'Innovation requires huge R&D.', ko: '혁신에는 막대한 R&D가 필요하다.', usage: '투자' }, { en: 'Innovation and geopolitics are linked.', ko: '혁신과 지정학이 연결된다.', usage: '맥락' }] },
+      { w: 'R&D', p: '/ˌɑːr ən ˈdiː/', d: 'important', k: '연구 개발 (Research and Development)', c: 'business', s: 'research and development', a: '', ex: [{ en: 'Chip R&D costs billions.', ko: '칩 R&D에는 수십억이 든다.', usage: '비용' }, { en: 'Governments fund chip R&D.', ko: '정부가 칩 R&D에 자금을 둔다.', usage: '정책' }, { en: 'R&D leads to next nodes.', ko: 'R&D가 다음 노드로 이어진다.', usage: '결과' }] },
+      { w: 'patent', p: '/ˈpætnt/', d: 'important', k: '특허', c: 'business', s: 'IP, intellectual property', a: 'open source', ex: [{ en: 'Chip patents are fiercely contested.', ko: '칩 특허를 두고 치열한 다툼이 있다.', usage: '경쟁' }, { en: 'Patents protect process technology.', ko: '특허가 공정 기술을 보호한다.', usage: '역할' }, { en: 'Cross-licensing of patents is common.', ko: '특허 크로스 라이선싱이 흔하다.', usage: '산업' }] },
+      { w: 'alliance', p: '/əˈlaɪəns/', d: 'important', k: '동맹, 연합', c: 'politics', s: 'partnership, bloc', a: 'rivalry', ex: [{ en: 'Chip alliances form around the US and China.', ko: '칩 동맹이 미·중을 중심으로 형성된다.', usage: '구도' }, { en: 'Alliances secure supply.', ko: '동맹이 공급을 확보한다.', usage: '목적' }, { en: 'Tech alliances are geopolitical.', ko: '기술 동맹은 지정학적이다.', usage: '성격' }] },
+      { w: 'embargo', p: '/ɪmˈbɑːrɡoʊ/', d: 'advanced', k: '금수, 수출·수입 금지', c: 'politics', s: 'ban, prohibition', a: 'free trade', ex: [{ en: 'Embargoes can target chip equipment.', ko: '금수가 칩 장비를 겨냥할 수 있다.', usage: '정책' }, { en: 'An embargo hurts both sides.', ko: '금수는 양쪽 모두에게 피해를 준다.', usage: '영향' }, { en: 'Embargoes are a tool of pressure.', ko: '금수는 압력 수단이다.', usage: '역할' }] },
+      { w: 'tariff', p: '/ˈtærɪf/', d: 'important', k: '관세', c: 'politics', s: 'duty, tax on imports', a: 'free trade', ex: [{ en: 'Tariffs on chips were debated.', ko: '칩에 대한 관세가 논의되었다.', usage: '무역' }, { en: 'Tariffs can protect domestic fabs.', ko: '관세가 국내 파브를 보호할 수 있다.', usage: '정책' }, { en: 'Tariffs raise prices for consumers.', ko: '관세는 소비자 가격을 올린다.', usage: '영향' }] },
+      { w: 'integrated circuit', p: '/ˈɪntɪɡreɪtɪd ˈsɜːrkɪt/', d: 'important', k: '집적 회로 (IC)', c: 'technology', s: 'IC, chip', a: 'discrete components', ex: [{ en: 'An integrated circuit packs many components.', ko: '집적 회로 하나에 많은 소자가 들어간다.', usage: '정의' }, { en: 'The first ICs were simple.', ko: '초기 집적 회로는 단순했다.', usage: '역사' }, { en: 'Modern ICs have billions of transistors.', ko: '현대 IC에는 수십억 개 트랜지스터가 있다.', usage: '규모' }] },
+      { w: 'processor', p: '/ˈprɑːsesər/', d: 'basic', k: '프로세서, 연산 처리 칩', c: 'technology', s: 'CPU, chip', a: '', ex: [{ en: 'Phones and PCs need powerful processors.', ko: '휴대폰과 PC에는 강력한 프로세서가 필요하다.', usage: '수요' }, { en: 'Apple designs its own processors.', ko: '애플이 자체 프로세서를 설계한다.', usage: '기업' }, { en: 'Processors are made at leading nodes.', ko: '프로세서는 최첨단 노드에서 만든다.', usage: '제조' }] },
+      { w: 'memory', p: '/ˈmeməri/', d: 'basic', k: '메모리 (DRAM, NAND 등 저장·기억 칩)', c: 'technology', s: 'storage chip, DRAM', a: 'logic', ex: [{ en: 'Memory chips store data.', ko: '메모리 칩이 데이터를 저장한다.', usage: '역할' }, { en: 'Korea leads in memory.', ko: '한국이 메모리에서 선두다.', usage: '시장' }, { en: 'Memory and logic use different fabs.', ko: '메모리와 로직은 다른 파브를 쓴다.', usage: '산업' }] },
+      { w: 'GPU', p: '/ˌdʒiː piː ˈjuː/', d: 'important', k: '그래픽 처리 장치 (연산·그래픽용 칩)', c: 'technology', s: 'graphics processor', a: '', ex: [{ en: 'GPUs are used for AI training.', ko: 'GPU가 AI 학습에 쓰인다.', usage: 'AI' }, { en: 'NVIDIA dominates the GPU market.', ko: '엔비디아가 GPU 시장을 지배한다.', usage: '시장' }, { en: 'GPUs need advanced nodes.', ko: 'GPU는 고도 노드가 필요하다.', usage: '제조' }] },
+      { w: 'AI', p: '/ˌeɪ ˈaɪ/', d: 'basic', k: '인공지능', c: 'technology', s: 'artificial intelligence', a: '', ex: [{ en: 'AI boosts demand for advanced chips.', ko: 'AI가 고도 칩 수요를 부채질한다.', usage: '수요' }, { en: 'Training AI needs huge compute.', ko: 'AI 학습에는 막대한 연산이 필요하다.', usage: '연산' }, { en: 'AI and chips are strategic.', ko: 'AI와 칩은 전략적이다.', usage: '정책' }] },
+      { w: 'yield', p: '/jiːld/', d: 'important', k: '수율 (양품 비율)', c: 'technology', s: 'output rate, good chips', a: 'defect rate', ex: [{ en: 'Yield determines fab profitability.', ko: '수율이 파브 수익성을 결정한다.', usage: '경제' }, { en: 'New nodes have low yield at first.', ko: '새 노드는 처음에 수율이 낮다.', usage: '학습' }, { en: 'Improving yield takes time.', ko: '수율 개선에는 시간이 걸린다.', usage: '과정' }] },
+      { w: 'defect', p: '/ˈdiːfekt/', d: 'important', k: '결함, 불량', c: 'technology', s: 'flaw, fault', a: 'perfect', ex: [{ en: 'Defects kill chip yield.', ko: '결함이 칩 수율을 떨어뜨린다.', usage: '품질' }, { en: 'Fewer defects mean higher profit.', ko: '결함이 적을수록 이익이 높다.', usage: '경제' }, { en: 'Defect density is measured in fabs.', ko: '파브에서는 결함 밀도를 측정한다.', usage: '측정' }] },
+      { w: 'scaling', p: '/ˈskeɪlɪŋ/', d: 'advanced', k: '스케일링 (선폭 축소·집적도 향상)', c: 'technology', s: 'shrinking, miniaturization', a: 'stagnation', ex: [{ en: 'Scaling has driven Moore\'s Law.', ko: '스케일링이 무어의 법칙을 이끌었다.', usage: '역할' }, { en: 'Scaling is getting harder.', ko: '스케일링이 점점 어려워진다.', usage: '한계' }, { en: 'Further scaling costs more.', ko: '추가 스케일링 비용이 커진다.', usage: '경제' }] },
+      { w: 'die', p: '/daɪ/', d: 'advanced', k: '다이 (웨이퍼에서 잘라낸 하나의 칩)', c: 'technology', s: 'chip die', a: '', ex: [{ en: 'Hundreds of dies come from one wafer.', ko: '웨이퍼 하나에서 수백 개 다이가 나온다.', usage: '제조' }, { en: 'Die size affects cost.', ko: '다이 크기가 비용에 영향을 준다.', usage: '경제' }, { en: 'Smaller dies mean more per wafer.', ko: '다이가 작을수록 웨이퍼당 개수가 늘어난다.', usage: '효율' }] },
+      { w: 'packaging', p: '/ˈpækɪdʒɪŋ/', d: 'important', k: '패키징 (칩을 외부와 연결·보호하는 공정)', c: 'technology', s: 'assembly, encapsulation', a: 'bare die', ex: [{ en: 'Packaging connects the chip to the board.', ko: '패키징이 칩을 보드에 연결한다.', usage: '역할' }, { en: 'Advanced packaging is a growth area.', ko: '고도 패키징이 성장 분야다.', usage: '트렌드' }, { en: 'Packaging can improve performance.', ko: '패키징이 성능을 높일 수 있다.', usage: '기술' }] },
+      { w: 'outsourcing', p: '/ˌaʊtˈsɔːrsɪŋ/', d: 'important', k: '아웃소싱 (제조·서비스를 외부에 위탁)', c: 'business', s: 'contracting out', a: 'in-house', ex: [{ en: 'Fabless firms use outsourcing for making chips.', ko: '팹리스 기업은 칩 제조를 아웃소싱한다.', usage: '모델' }, { en: 'Outsourcing to Asia cut costs.', ko: '아시아로의 아웃소싱이 비용을 줄였다.', usage: '역사' }, { en: 'Outsourcing creates dependency.', ko: '아웃소싱은 의존성을 만든다.', usage: '리스크' }] },
+      { w: 'vertically integrated', p: '/ˈvɜːrtɪkli ˈɪntɪɡreɪtɪd/', d: 'advanced', k: '수직 통합 (설계부터 제조까지 한 회사)', c: 'business', s: 'IDM, in-house', a: 'fabless', ex: [{ en: 'Intel was vertically integrated.', ko: '인텔은 수직 통합이었다.', usage: '모델' }, { en: 'Vertically integrated firms control the whole chain.', ko: '수직 통합 기업이 전 과정을 통제한다.', usage: '장점' }, { en: 'Vertical integration is costly.', ko: '수직 통합은 비용이 크다.', usage: '단점' }] },
+      { w: 'conglomerate', p: '/kənˈɡlɑːmərət/', d: 'advanced', k: '콘글로머릿, 대기업 집단', c: 'business', s: 'conglomerate, group', a: 'single company', ex: [{ en: 'Samsung is a conglomerate with chip units.', ko: '삼성은 칩 부문을 가진 대기업이다.', usage: '기업' }, { en: 'Conglomerates can fund big fabs.', ko: '대기업이 대형 파브에 자금을 댈 수 있다.', usage: '자금' }, { en: 'Conglomerates span memory and logic.', ko: '대기업이 메모리와 로직을 아우른다.', usage: '범위' }] },
+      { w: 'market share', p: '/ˈmɑːrkɪt ʃer/', d: 'important', k: '시장 점유율', c: 'business', s: 'share of market', a: 'loss of share', ex: [{ en: 'TSMC has the largest foundry market share.', ko: 'TSMC가 파운드리 시장 점유율 1위다.', usage: '시장' }, { en: 'Market share shifts with technology.', ko: '시장 점유율은 기술에 따라 바뀐다.', usage: '경쟁' }, { en: 'Losing market share hurts revenue.', ko: '시장 점유율 하락이 매출을 줄인다.', usage: '경제' }] },
+      { w: 'revenue', p: '/ˈrevənjuː/', d: 'basic', k: '매출, 수익', c: 'business', s: 'sales, income', a: 'loss', ex: [{ en: 'Chip revenue hit record highs.', ko: '칩 매출이 사상 최고를 기록했다.', usage: '성과' }, { en: 'Foundries earn revenue from wafers.', ko: '파운드리는 웨이퍼에서 매출을 낸다.', usage: '구성' }, { en: 'Revenue funds new fabs.', ko: '매출이 새 파브에 자금을 둔다.', usage: '투자' }] },
+      { w: 'investment', p: '/ɪnˈvestmənt/', d: 'basic', k: '투자', c: 'business', s: 'capital spending', a: 'divestment', ex: [{ en: 'Chip investment is at record levels.', ko: '칩 투자가 사상 최고 수준이다.', usage: '규모' }, { en: 'Governments push investment in fabs.', ko: '정부가 파브 투자를 촉진한다.', usage: '정책' }, { en: 'Investment cycles are long.', ko: '투자 주기가 길다.', usage: '특성' }] },
+      { w: 'strategic', p: '/strəˈtiːdʒɪk/', d: 'important', k: '전략적인', c: 'politics', s: 'critical, vital', a: 'trivial', ex: [{ en: 'Chips are strategic assets.', ko: '칩은 전략 자산이다.', usage: '가치' }, { en: 'Strategic industries get state support.', ko: '전략 산업은 국가 지원을 받는다.', usage: '정책' }, { en: 'Strategic autonomy requires local fabs.', ko: '전략적 자율성에는 국내 파브가 필요하다.', usage: '목표' }] },
+      { w: 'autonomy', p: '/ɔːˈtɑːnəmi/', d: 'advanced', k: '자율성, 자급 능력', c: 'politics', s: 'independence, self-sufficiency', a: 'dependency', ex: [{ en: 'Tech autonomy is a policy goal.', ko: '기술 자율성이 정책 목표다.', usage: '정책' }, { en: 'Full autonomy in chips is hard.', ko: '칩에서 완전 자율은 어렵다.', usage: '한계' }, { en: 'Autonomy reduces geopolitical risk.', ko: '자율성이 지정학 리스크를 줄인다.', usage: '이유' }] },
+      { w: 'vulnerability', p: '/ˌvʌlnərəˈbɪləti/', d: 'important', k: '취약성', c: 'politics', s: 'weakness, exposure', a: 'resilience', ex: [{ en: 'Concentration in Taiwan is a vulnerability.', ko: '대만 집중이 취약성이다.', usage: '공급망' }, { en: 'Vulnerability drives reshoring.', ko: '취약성이 리쇼어링을 이끈다.', usage: '대응' }, { en: 'Reducing vulnerability costs money.', ko: '취약성 감소에는 비용이 든다.', usage: '비용' }] },
+      { w: 'resilience', p: '/rɪˈzɪliəns/', d: 'important', k: '회복력, 복원력', c: 'business', s: 'ability to recover', a: 'fragility', ex: [{ en: 'Supply chain resilience is a priority.', ko: '공급망 회복력이 우선이다.', usage: '정책' }, { en: 'Resilience means diversification.', ko: '회복력은 다각화를 의미한다.', usage: '전략' }, { en: 'Building resilience takes time.', ko: '회복력 구축에는 시간이 걸린다.', usage: '과정' }] },
+      { w: 'diversification', p: '/daɪˌvɜːrsɪfɪˈkeɪʃn/', d: 'advanced', k: '다각화 (공급원·지역 분산)', c: 'business', s: 'spread, variety', a: 'concentration', ex: [{ en: 'Diversification reduces risk.', ko: '다각화가 리스크를 줄인다.', usage: '목적' }, { en: 'Companies seek geographic diversification.', ko: '기업들이 지역 다각화를 추구한다.', usage: '전략' }, { en: 'Diversification is slow and costly.', ko: '다각화는 느리고 비용이 든다.', usage: '한계' }] },
+      { w: 'CHIPS Act', p: '/tʃɪps ækt/', d: 'important', k: '미국 반도체 지원법 (CHIPS and Science Act)', c: 'politics', s: 'US chip law', a: '', ex: [{ en: 'The CHIPS Act provides subsidies for fabs.', ko: 'CHIPS 법이 파브에 보조금을 준다.', usage: '정책' }, { en: 'CHIPS Act aims to bring fabs to the US.', ko: 'CHIPS 법은 파브를 미국으로 불러오는 것이 목표다.', usage: '목표' }, { en: 'CHIPS Act funding is in the billions.', ko: 'CHIPS 법 자금은 수십억 달러 규모다.', usage: '규모' }] },
+      { w: 'restriction', p: '/rɪˈstrɪkʃn/', d: 'important', k: '제한, 규제', c: 'politics', s: 'limit, constraint', a: 'freedom', ex: [{ en: 'Export restrictions target China.', ko: '수출 제한이 중국을 겨냥한다.', usage: '정책' }, { en: 'Restrictions on equipment sales.', ko: '장비 판매에 대한 제한.', usage: '대상' }, { en: 'Restrictions reshape the industry.', ko: '제한이 산업을 재편한다.', usage: '영향' }] },
+      { w: 'compliance', p: '/kəmˈplaɪəns/', d: 'important', k: '준수 (규정·제재 따름)', c: 'business', s: 'adherence, following rules', a: 'violation', ex: [{ en: 'Companies must ensure export compliance.', ko: '기업은 수출 규정 준수를 해야 한다.', usage: '의무' }, { en: 'Compliance with sanctions is mandatory.', ko: '제재 준수는 의무다.', usage: '법' }, { en: 'Compliance costs are rising.', ko: '준수 비용이 늘고 있다.', usage: '비용' }] },
+      { w: 'leverage', p: '/ˈlevərɪdʒ/', d: 'important', k: '레버리지, 영향력 (무기로 활용)', c: 'politics', s: 'power, influence', a: 'weakness', ex: [{ en: 'Chip control gives the US leverage.', ko: '칩 통제가 미국에 레버리지를 준다.', usage: '정책' }, { en: 'Leverage in trade negotiations.', ko: '무역 협상에서의 영향력.', usage: '협상' }, { en: 'Leverage can backfire.', ko: '레버리지는 역효과를 낼 수 있다.', usage: '리스크' }] },
+      { w: 'hegemony', p: '/hɪˈdʒeməni/', d: 'advanced', k: '패권, 주도권', c: 'politics', s: 'dominance, leadership', a: 'subordination', ex: [{ en: 'US and China compete for tech hegemony.', ko: '미국과 중국이 기술 패권을 놓고 경쟁한다.', usage: '경쟁' }, { en: 'Chip hegemony implies control.', ko: '칩 패권은 통제를 의미한다.', usage: '의미' }, { en: 'Hegemony is contested.', ko: '패권은 도전받고 있다.', usage: '현실' }] },
+      { w: 'deterrence', p: '/dɪˈterəns/', d: 'advanced', k: '억제 (상대가 행동하지 못하게 함)', c: 'politics', s: 'deterrence, prevention', a: 'provocation', ex: [{ en: 'Export controls serve as deterrence.', ko: '수출 통제가 억제 수단이 된다.', usage: '역할' }, { en: 'Deterrence can prevent escalation.', ko: '억제가 확대를 막을 수 있다.', usage: '목적' }, { en: 'Chip dependence affects deterrence.', ko: '칩 의존이 억제에 영향을 준다.', usage: '연결' }] },
+      { w: 'espionage', p: '/ˈespiənɑːʒ/', d: 'advanced', k: '스파이 활동, 산업 스파이', c: 'politics', s: 'spying, theft', a: 'transparency', ex: [{ en: 'Chip tech is a target of espionage.', ko: '칩 기술이 스파이 활동의 표적이다.', usage: '위험' }, { en: 'Espionage complicates partnerships.', ko: '스파이 활동이 파트너십을 복잡하게 한다.', usage: '영향' }, { en: 'Governments accuse each other of espionage.', ko: '정부들이 서로 스파이 활동을 비난한다.', usage: '관계' }] },
+      { w: 'IP', p: '/ˌaɪ ˈpiː/', d: 'important', k: '지적 재산 (Intellectual Property)', c: 'business', s: 'intellectual property', a: '', ex: [{ en: 'Chip IP is highly valuable.', ko: '칩 IP는 매우 가치 있다.', usage: '가치' }, { en: 'IP theft is a concern.', ko: 'IP 도난이 우려 사항이다.', usage: '리스크' }, { en: 'Licensing IP generates revenue.', ko: 'IP 라이선싱이 매출을 낸다.', usage: '비즈니스' }] },
+      { w: 'EDA', p: '/ˌiː diː ˈeɪ/', d: 'advanced', k: '전자 설계 자동화 (Electronic Design Automation)', c: 'technology', s: 'design tools', a: '', ex: [{ en: 'EDA tools are used to design chips.', ko: 'EDA 도구로 칩을 설계한다.', usage: '역할' }, { en: 'EDA is dominated by a few firms.', ko: 'EDA는 소수 기업이 지배한다.', usage: '시장' }, { en: 'EDA is critical for advanced chips.', ko: '고도 칩에는 EDA가 필수다.', usage: '중요성' }] },
+      { w: 'substrate', p: '/ˈsʌbstreɪt/', d: 'advanced', k: '기판 (칩이 올라가는 받침)', c: 'technology', s: 'base, carrier', a: '', ex: [{ en: 'Chips are mounted on substrates.', ko: '칩은 기판 위에 실장된다.', usage: '제조' }, { en: 'Advanced substrates enable packaging.', ko: '고도 기판이 패키징을 가능하게 한다.', usage: '역할' }, { en: 'Substrate supply is concentrated.', ko: '기판 공급이 집중되어 있다.', usage: '공급망' }] },
+      { w: 'raw material', p: '/rɔː məˈtɪriəl/', d: 'important', k: '원자재', c: 'business', s: 'input, feedstock', a: 'finished good', ex: [{ en: 'Silicon is a key raw material.', ko: '실리콘이 핵심 원자재다.', usage: '소재' }, { en: 'Raw material supply can be disrupted.', ko: '원자재 공급이 차단될 수 있다.', usage: '리스크' }, { en: 'Rare materials are used in chips.', ko: '희소 원자재가 칩에 쓰인다.', usage: '구성' }] },
+      { w: 'workforce', p: '/ˈwɜːrkfɔːrs/', d: 'important', k: '노동력, 인력', c: 'business', s: 'labor, workers', a: 'shortage', ex: [{ en: 'Chip fabs need a skilled workforce.', ko: '칩 파브에는 숙련 인력이 필요하다.', usage: '필요' }, { en: 'Workforce shortage is a bottleneck.', ko: '인력 부족이 병목이다.', usage: '문제' }, { en: 'Training the workforce takes years.', ko: '인력 양성에는 수 년이 걸린다.', usage: '시간' }] },
+      { w: 'talent', p: '/ˈtælənt/', d: 'basic', k: '인재, 전문 인력', c: 'business', s: 'skilled people', a: 'shortage', ex: [{ en: 'Chip companies compete for talent.', ko: '칩 기업이 인재를 두고 경쟁한다.', usage: '경쟁' }, { en: 'Talent is scarce in semiconductors.', ko: '반도체 인재는 부족하다.', usage: '수급' }, { en: 'Talent flows to leading regions.', ko: '인재가 선도 지역으로 흐른다.', usage: '이동' }] },
+      { w: 'breakthrough', p: '/ˈbreɪkθruː/', d: 'important', k: '돌파, 혁신적 성과', c: 'technology', s: 'advance, leap', a: 'stagnation', ex: [{ en: 'EUV was a breakthrough for scaling.', ko: 'EUV가 스케일링의 돌파구였다.', usage: '기술' }, { en: 'Breakthroughs take decades of R&D.', ko: '돌파에는 수십 년의 R&D가 든다.', usage: '투자' }, { en: 'The next breakthrough is uncertain.', ko: '다음 돌파는 불확실하다.', usage: '전망' }] },
+      { w: 'legacy', p: '/ˈleɡəsi/', d: 'important', k: '유산, 기존 세대 (기술·제품)', c: 'technology', s: 'older generation', a: 'leading-edge', ex: [{ en: 'Legacy nodes still make most chips.', ko: '레거시 노드가 여전히 대부분의 칩을 만든다.', usage: '시장' }, { en: 'Legacy fabs are cheaper to run.', ko: '레거시 파브는 운영 비용이 낮다.', usage: '경제' }, { en: 'Demand for legacy chips is strong.', ko: '레거시 칩 수요가 크다.', usage: '수요' }] },
+      { w: 'leading-edge', p: '/ˌliːdɪŋ ˈedʒ/', d: 'advanced', k: '최첨단 (가장 앞선 기술)', c: 'technology', s: 'cutting-edge, advanced', a: 'legacy', ex: [{ en: 'Leading-edge chips need EUV.', ko: '최첨단 칩에는 EUV가 필요하다.', usage: '기술' }, { en: 'Only a few fabs are leading-edge.', ko: '최첨단 파브는 소수뿐이다.', usage: '시장' }, { en: 'Leading-edge is where the rivalry is.', ko: '최첨단이 경쟁의 장이다.', usage: '경쟁' }] },
+      { w: 'outsource', p: '/ˌaʊtˈsɔːrs/', d: 'important', k: '외주하다, 아웃소싱하다', c: 'business', s: 'contract out', a: 'in-source', ex: [{ en: 'Apple outsources chip making to TSMC.', ko: '애플이 칩 제조를 TSMC에 외주한다.', usage: '모델' }, { en: 'Outsourcing reduced costs.', ko: '아웃소싱이 비용을 줄였다.', usage: '역사' }, { en: 'Outsourcing creates supply risk.', ko: '아웃소싱이 공급 리스크를 만든다.', usage: '리스크' }] },
+      { w: 'relocate', p: '/ˌriːloʊˈkeɪt/', d: 'important', k: '이전하다, 재배치하다', c: 'business', s: 'move, shift', a: 'stay', ex: [{ en: 'Some production may relocate from Asia.', ko: '일부 생산이 아시아에서 이전할 수 있다.', usage: '트렌드' }, { en: 'Relocating fabs is extremely costly.', ko: '파브 이전은 극도로 비싸다.', usage: '비용' }, { en: 'Relocation is driven by policy.', ko: '이전은 정책에 의해 추진된다.', usage: '동기' }] },
+      { w: 'consolidation', p: '/kənˌsɑːlɪˈdeɪʃn/', d: 'advanced', k: '통합, 인수합병', c: 'business', s: 'merger, concentration', a: 'fragmentation', ex: [{ en: 'The industry has seen consolidation.', ko: '산업에 통합이 이뤄졌다.', usage: '트렌드' }, { en: 'Consolidation reduces the number of players.', ko: '통합으로 참여 기업 수가 줄어든다.', usage: '영향' }, { en: 'Consolidation can improve efficiency.', ko: '통합이 효율을 높일 수 있다.', usage: '효과' }] },
+      { w: 'competitor', p: '/kəmˈpetɪtər/', d: 'basic', k: '경쟁자', c: 'business', s: 'rival, player', a: 'partner', ex: [{ en: 'TSMC and Samsung are competitors.', ko: 'TSMC와 삼성이 경쟁자다.', usage: '시장' }, { en: 'Competitors race for the next node.', ko: '경쟁자들이 다음 노드를 두고 경쟁한다.', usage: '경쟁' }, { en: 'New competitors need huge capital.', ko: '새 경쟁자에게는 막대한 자본이 필요하다.', usage: '진입' }] },
+      { w: 'customer', p: '/ˈkʌstəmər/', d: 'basic', k: '고객, 수주처', c: 'business', s: 'client, buyer', a: 'supplier', ex: [{ en: 'Apple is TSMC\'s biggest customer.', ko: '애플이 TSMC 최대 고객이다.', usage: '관계' }, { en: 'Customers want guaranteed supply.', ko: '고객은 안정적 공급을 원한다.', usage: '수요' }, { en: 'Customer concentration is a risk.', ko: '고객 집중이 리스크다.', usage: '리스크' }] },
+      { w: 'supplier', p: '/səˈplaɪər/', d: 'basic', k: '공급자, 협력사', c: 'business', s: 'vendor, provider', a: 'customer', ex: [{ en: 'ASML is a key equipment supplier.', ko: 'ASML이 핵심 장비 공급자다.', usage: '역할' }, { en: 'Few suppliers make EUV tools.', ko: 'EUV 장비를 만드는 공급자는 소수다.', usage: '시장' }, { en: 'Supplier diversity reduces risk.', ko: '공급자 다각화가 리스크를 줄인다.', usage: '전략' }] },
+      { w: 'equipment', p: '/ɪˈkwɪpmənt/', d: 'important', k: '장비, 설비', c: 'technology', s: 'tools, machinery', a: '', ex: [{ en: 'Chip equipment is highly specialized.', ko: '칩 장비는 매우 전문적이다.', usage: '특성' }, { en: 'Export controls target equipment.', ko: '수출 통제가 장비를 겨냥한다.', usage: '정책' }, { en: 'Equipment lead times are long.', ko: '장비 리드타임이 길다.', usage: '공급' }] },
+      { w: 'tool', p: '/tuːl/', d: 'basic', k: '도구, 장비 (반도체 장비)', c: 'technology', s: 'equipment, machine', a: '', ex: [{ en: 'EUV tools cost hundreds of millions.', ko: 'EUV 장비는 수억 달러다.', usage: '비용' }, { en: 'Tools define what nodes are possible.', ko: '장비가 가능한 노드를 결정한다.', usage: '역할' }, { en: 'Few companies make leading tools.', ko: '최첨단 장비를 만드는 회사는 소수다.', usage: '시장' }] },
+      { w: 'pipeline', p: '/ˈpaɪplaɪn/', d: 'important', k: '파이프라인 (공급·개발 흐름)', c: 'business', s: 'supply flow, queue', a: 'bottleneck', ex: [{ en: 'New fabs are in the pipeline.', ko: '새 파브가 파이프라인에 있다.', usage: '투자' }, { en: 'The R&D pipeline takes years.', ko: 'R&D 파이프라인에는 수 년이 걸린다.', usage: '시간' }, { en: 'Pipeline visibility is important.', ko: '파이프라인 가시성이 중요하다.', usage: '관리' }] },
+      { w: 'timeline', p: '/ˈtaɪmlaɪn/', d: 'basic', k: '일정, 타임라인', c: 'business', s: 'schedule, plan', a: 'delay', ex: [{ en: 'Fab construction has long timelines.', ko: '파브 건설 일정이 길다.', usage: '기간' }, { en: 'Node timelines slip often.', ko: '노드 일정이 자주 밀린다.', usage: '현실' }, { en: 'Timelines affect investment decisions.', ko: '일정이 투자 결정에 영향을 준다.', usage: '의사결정' }] },
+      { w: 'forecast', p: '/ˈfɔːrkæst/', d: 'important', k: '전망, 예측', c: 'business', s: 'prediction, outlook', a: 'surprise', ex: [{ en: 'Demand forecasts drive capacity plans.', ko: '수요 전망이 능력 계획을 이끈다.', usage: '계획' }, { en: 'Forecasts were wrong during the shortage.', ko: '부족 시기에는 전망이 틀렸다.', usage: '불확실성' }, { en: 'Long-term forecasts are uncertain.', ko: '장기 전망은 불확실하다.', usage: '한계' }] },
+      { w: 'cycle', p: '/ˈsaɪkl/', d: 'important', k: '주기, 사이클 (호황·불황 반복)', c: 'business', s: 'boom and bust', a: 'stability', ex: [{ en: 'The chip industry is cyclical.', ko: '칩 산업은 주기적이다.', usage: '특성' }, { en: 'Cycles affect investment timing.', ko: '주기가 투자 시점에 영향을 준다.', usage: '투자' }, { en: 'The current cycle is uncertain.', ko: '현재 주기가 불확실하다.', usage: '전망' }] },
+      { w: 'glut', p: '/ɡlʌt/', d: 'advanced', k: '과잉 공급', c: 'business', s: 'oversupply, surplus', a: 'shortage', ex: [{ en: 'A chip glut followed the shortage.', ko: '부족 뒤에 칩 과잉이 왔다.', usage: '주기' }, { en: 'Glut pushes prices down.', ko: '과잉이 가격을 내린다.', usage: '경제' }, { en: 'Glut can follow overinvestment.', ko: '과잉은 과투자 뒤에 올 수 있다.', usage: '원인' }] },
+      { w: 'oversupply', p: '/ˌoʊvərsəˈplaɪ/', d: 'advanced', k: '공급 과잉', c: 'business', s: 'glut, excess', a: 'shortage', ex: [{ en: 'Oversupply hurt memory makers.', ko: '공급 과잉이 메모리 업체를 해쳤다.', usage: '영향' }, { en: 'Oversupply often follows a boom.', ko: '공급 과잉은 종종 호황 뒤에 온다.', usage: '주기' }, { en: 'Managing oversupply is difficult.', ko: '공급 과잉 관리가 어렵다.', usage: '관리' }] },
+      { w: 'logic', p: '/ˈlɑːdʒɪk/', d: 'important', k: '로직 (연산·처리용 칩, 메모리와 구분)', c: 'technology', s: 'processor, compute', a: 'memory', ex: [{ en: 'Logic and memory use different fabs.', ko: '로직과 메모리는 다른 파브를 쓴다.', usage: '산업' }, { en: 'TSMC leads in logic.', ko: 'TSMC가 로직에서 선두다.', usage: '시장' }, { en: 'Logic chips need the smallest nodes.', ko: '로직 칩에는 가장 작은 노드가 필요하다.', usage: '기술' }] },
+      { w: 'DRAM', p: '/diː ræm/', d: 'important', k: '디램 (동적 메모리)', c: 'technology', s: 'dynamic RAM', a: '', ex: [{ en: 'DRAM is used in phones and servers.', ko: 'DRAM이 휴대폰과 서버에 쓰인다.', usage: '용도' }, { en: 'Korea leads in DRAM.', ko: '한국이 DRAM에서 선두다.', usage: '시장' }, { en: 'DRAM prices are cyclical.', ko: 'DRAM 가격은 주기적이다.', usage: '경제' }] },
+      { w: 'NAND', p: '/nænd/', d: 'important', k: '낸드 플래시 (저장용 메모리)', c: 'technology', s: 'flash memory', a: '', ex: [{ en: 'NAND is used in SSDs.', ko: '낸드가 SSD에 쓰인다.', usage: '용도' }, { en: 'NAND demand grew with data.', ko: '낸드 수요가 데이터와 함께 늘었다.', usage: '수요' }, { en: 'NAND and DRAM are different.', ko: '낸드와 DRAM은 다르다.', usage: '구분' }] },
+      { w: 'import', p: '/ɪmˈpɔːrt/', d: 'basic', k: '수입 (하다)', c: 'politics', s: 'bring in', a: 'export', ex: [{ en: 'China imports most advanced chips.', ko: '중국은 고도 칩 대부분을 수입한다.', usage: '무역' }, { en: 'Import restrictions affect supply.', ko: '수입 제한이 공급에 영향을 준다.', usage: '정책' }, { en: 'Reducing import dependence is a goal.', ko: '수입 의존을 줄이는 것이 목표다.', usage: '전략' }] },
+      { w: 'technology race', p: '/tekˈnɑːlədʒi reɪs/', d: 'important', k: '기술 경쟁', c: 'politics', s: 'tech competition', a: 'cooperation', ex: [{ en: 'The technology race is intensifying.', ko: '기술 경쟁이 격화하고 있다.', usage: '현황' }, { en: 'The technology race drives investment.', ko: '기술 경쟁이 투자를 이끈다.', usage: '동기' }, { en: 'Winning the technology race is strategic.', ko: '기술 경쟁에서 이기는 것이 전략적이다.', usage: '가치' }] },
+      { w: 'export', p: '/ˈekspɔːrt/', d: 'basic', k: '수출 (하다)', c: 'politics', s: 'ship abroad', a: 'import', ex: [{ en: 'Export controls limit sales to China.', ko: '수출 통제가 중국 판매를 제한한다.', usage: '정책' }, { en: 'Chip exports are valuable.', ko: '칩 수출은 가치가 크다.', usage: '무역' }, { en: 'Export licenses are required.', ko: '수출 허가가 필요하다.', usage: '규제' }] },
+      { w: 'domestic', p: '/dəˈmestɪk/', d: 'basic', k: '국내의', c: 'politics', s: 'local, home', a: 'foreign', ex: [{ en: 'Domestic chip production is a goal.', ko: '국내 칩 생산이 목표다.', usage: '정책' }, { en: 'Domestic fabs create jobs.', ko: '국내 파브가 일자리를 만든다.', usage: '효과' }, { en: 'Domestic supply reduces risk.', ko: '국내 공급이 리스크를 줄인다.', usage: '이유' }] },
+      { w: 'offshore', p: '/ˌɔːfˈʃɔːr/', d: 'important', k: '해외의, 오프쇼어', c: 'business', s: 'abroad, overseas', a: 'onshore', ex: [{ en: 'Most chip making was offshored to Asia.', ko: '칩 제조 대부분이 아시아로 오프쇼어됐다.', usage: '역사' }, { en: 'Offshore fabs are cheaper.', ko: '해외 파브가 더 싸다.', usage: '비용' }, { en: 'Reshoring reverses offshoring.', ko: '리쇼어링은 오프쇼어링을 되돌린다.', usage: '정책' }] },
+      { w: 'critical', p: '/ˈkrɪtɪkl/', d: 'basic', k: '핵심적인, 결정적인', c: 'politics', s: 'vital, essential', a: 'minor', ex: [{ en: 'Chips are critical to the economy.', ko: '칩은 경제에 핵심적이다.', usage: '역할' }, { en: 'Critical technology is protected.', ko: '핵심 기술이 보호된다.', usage: '정책' }, { en: 'Supply chain is critical infrastructure.', ko: '공급망이 핵심 인프라다.', usage: '정의' }] },
+      { w: 'dependence', p: '/dɪˈpendəns/', d: 'important', k: '의존 (상태)', c: 'business', s: 'reliance', a: 'independence', ex: [{ en: 'Dependence on Taiwan is a risk.', ko: '대만 의존이 리스크다.', usage: '지정학' }, { en: 'Reducing dependence is a goal.', ko: '의존을 줄이는 것이 목표다.', usage: '전략' }, { en: 'Dependence grew over decades.', ko: '의존은 수십 년에 걸쳐 커졌다.', usage: '역사' }] }
+    ];
+
+    // --- WORD DATA: EAL (100 words) ---
+    const EAL_WORDS = [
+      { w: 'analyze', p: '/ˈænəlaɪz/', d: 'important', k: '분석하다 (구성 요소나 원인을 살펴 이해하다)', c: 'academic', s: 'examine, study, evaluate', a: 'ignore, synthesize', ex: [{ en: 'We need to analyze the data.', ko: '데이터를 분석해야 한다.', usage: '논문·보고서' }, { en: 'Analyze the causes of the war.', ko: '전쟁의 원인을 분석하라.', usage: '과제 지시문' }, { en: 'She analyzed the poem in class.', ko: '그녀는 수업에서 시를 분석했다.', usage: '텍스트 분석' }] },
+      { w: 'synthesize', p: '/ˈsɪnθəsaɪz/', d: 'important', k: '종합하다, 통합하여 정리하다', c: 'academic', s: 'combine, integrate', a: 'analyze separately', ex: [{ en: 'Synthesize the main ideas from the text.', ko: '텍스트에서 핵심 아이디어를 종합하라.', usage: '에세이' }, { en: 'The essay synthesizes multiple sources.', ko: '그 에세이는 여러 출처를 종합한다.', usage: '논문' }, { en: 'We need to synthesize our findings.', ko: '우리 발견을 종합해야 한다.', usage: '보고서' }] },
+      { w: 'evaluate', p: '/ɪˈvæljueɪt/', d: 'important', k: '평가하다 (가치·품질을 판단하다)', c: 'academic', s: 'assess, judge', a: 'ignore', ex: [{ en: 'Evaluate the strength of the argument.', ko: '논증의 강도를 평가하라.', usage: '비판적 사고' }, { en: 'Teachers evaluate student work.', ko: '교사는 학생 과제를 평가한다.', usage: '교육' }, { en: 'We must evaluate the evidence.', ko: '증거를 평가해야 한다.', usage: '논리' }] },
+      { w: 'compare', p: '/kəmˈper/', d: 'basic', k: '비교하다', c: 'academic', s: 'contrast, examine together', a: 'ignore', ex: [{ en: 'Compare the two poems.', ko: '두 시를 비교하라.', usage: '과제' }, { en: 'Compared to last year, scores improved.', ko: '작년과 비교해 점수가 올랐다.', usage: '대조' }, { en: 'Compare and contrast the sources.', ko: '출처를 비교·대조하라.', usage: '에세이' }] },
+      { w: 'contrast', p: '/ˈkɑːntræst/', d: 'important', k: '대조하다, 대비하다', c: 'academic', s: 'compare differences', a: 'compare similarities', ex: [{ en: 'Contrast the two characters.', ko: '두 인물을 대조하라.', usage: '문학' }, { en: 'In contrast, the second study found...', ko: '대조적으로 두 번째 연구는 …라고 했다.', usage: '전환어' }, { en: 'By contrast, the north was cold.', ko: '반면 북쪽은 추웠다.', usage: '대비' }] },
+      { w: 'hypothesis', p: '/haɪˈpɑːθəsɪs/', d: 'important', k: '가설 (검증할 수 있는 예측)', c: 'academic', s: 'theory, prediction', a: 'conclusion', ex: [{ en: 'State your hypothesis clearly.', ko: '가설을 명확히 제시하라.', usage: '과학' }, { en: 'The hypothesis was supported by data.', ko: '가설이 데이터로 뒷받침되었다.', usage: '실험' }, { en: 'We tested the hypothesis.', ko: '우리는 그 가설을 검증했다.', usage: '연구' }] },
+      { w: 'evidence', p: '/ˈevɪdəns/', d: 'important', k: '증거', c: 'academic', s: 'proof, support', a: 'speculation', ex: [{ en: 'Cite evidence from the text.', ko: '텍스트에서 증거를 인용하라.', usage: '에세이' }, { en: 'There is strong evidence for this.', ko: '이에 대한 강한 증거가 있다.', usage: '논증' }, { en: 'Evidence suggests that...', ko: '증거는 …를 시사한다.', usage: '결론 도입' }] },
+      { w: 'conclude', p: '/kənˈkluːd/', d: 'important', k: '결론을 내리다, 마무리하다', c: 'academic', s: 'infer, end', a: 'introduce', ex: [{ en: 'We can conclude that the plan works.', ko: '그 계획이 효과가 있다고 결론 내릴 수 있다.', usage: '논리' }, { en: 'The essay concludes with a summary.', ko: '에세이는 요약으로 마무리된다.', usage: '구조' }, { en: 'In conclusion, I argue that...', ko: '결론적으로 나는 …라고 주장한다.', usage: '전환어' }] },
+      { w: 'interpret', p: '/ɪnˈtɜːrprɪt/', d: 'important', k: '해석하다, 의미를 풀다', c: 'academic', s: 'explain, understand', a: 'misread', ex: [{ en: 'Interpret the graph.', ko: '그래프를 해석하라.', usage: '데이터' }, { en: 'How do you interpret this passage?', ko: '이 구절을 어떻게 해석하나요?', usage: '텍스트' }, { en: 'Interpretation may vary.', ko: '해석은 달라질 수 있다.', usage: '논의' }] },
+      { w: 'argument', p: '/ˈɑːrɡjumənt/', d: 'important', k: '논증, 주장', c: 'academic', s: 'claim, case', a: 'agreement', ex: [{ en: 'The main argument is that...', ko: '핵심 논증은 …라는 것이다.', usage: '에세이' }, { en: 'Support your argument with evidence.', ko: '논증을 증거로 뒷받침하라.', usage: '과제' }, { en: 'Her argument was persuasive.', ko: '그녀의 논증은 설득력 있었다.', usage: '평가' }] },
+      { w: 'perspective', p: '/pərˈspektɪv/', d: 'important', k: '관점, 시각', c: 'academic', s: 'viewpoint, angle', a: 'bias', ex: [{ en: 'From a historical perspective...', ko: '역사적 관점에서 …', usage: '전환어' }, { en: 'Consider multiple perspectives.', ko: '여러 관점을 고려하라.', usage: '논의' }, { en: 'My perspective changed after reading.', ko: '읽은 후 제 관점이 바뀌었다.', usage: '반성' }] },
+      { w: 'context', p: '/ˈkɑːntekst/', d: 'important', k: '맥락, 상황', c: 'academic', s: 'background, situation', a: 'isolation', ex: [{ en: 'Consider the historical context.', ko: '역사적 맥락을 고려하라.', usage: '분석' }, { en: 'In this context, the word means...', ko: '이 맥락에서 그 단어는 …를 의미한다.', usage: '어휘' }, { en: 'Context is essential for understanding.', ko: '이해하려면 맥락이 필수다.', usage: '원칙' }] },
+      { w: 'significant', p: '/sɪɡˈnɪfɪkənt/', d: 'important', k: '중요한, 의미 있는', c: 'academic', s: 'important, meaningful', a: 'trivial', ex: [{ en: 'A significant difference was found.', ko: '의미 있는 차이가 발견되었다.', usage: '연구' }, { en: 'This is significant for our argument.', ko: '이것은 우리 논증에 중요하다.', usage: '논리' }, { en: 'Significantly, the results changed.', ko: '중요하게도 결과가 바뀌었다.', usage: '부사' }] },
+      { w: 'factor', p: '/ˈfæktər/', d: 'basic', k: '요인, 요소', c: 'academic', s: 'element, cause', a: 'result', ex: [{ en: 'Several factors affect the outcome.', ko: '여러 요인이 결과에 영향을 준다.', usage: '분석' }, { en: 'The key factor is motivation.', ko: '핵심 요인은 동기다.', usage: '원인' }, { en: 'Factor in the cost of time.', ko: '시간 비용을 요인으로 넣어라.', usage: '고려' }] },
+      { w: 'concept', p: '/ˈkɑːnsept/', d: 'basic', k: '개념, 관념', c: 'academic', s: 'idea, notion', a: 'fact', ex: [{ en: 'Explain the concept of democracy.', ko: '민주주의 개념을 설명하라.', usage: '정의' }, { en: 'The concept is central to the course.', ko: '그 개념이 수업의 핵심이다.', usage: '교육' }, { en: 'Key concepts are in bold.', ko: '핵심 개념은 굵게 표시되어 있다.', usage: '텍스트' }] },
+      { w: 'define', p: '/dɪˈfaɪn/', d: 'basic', k: '정의하다, 규정하다', c: 'academic', s: 'explain meaning', a: 'undefined', ex: [{ en: 'Define the term before using it.', ko: '용어를 쓰기 전에 정의하라.', usage: '에세이' }, { en: 'The law defines citizenship.', ko: '그 법이 시민권을 규정한다.', usage: '규정' }, { en: 'Well-defined goals help success.', ko: '명확히 정의된 목표가 성공을 돕는다.', usage: '계획' }] },
+      { w: 'demonstrate', p: '/ˈdemənstreɪt/', d: 'important', k: '증명하다, 보여주다', c: 'academic', s: 'show, prove', a: 'disprove', ex: [{ en: 'Demonstrate your understanding.', ko: '이해를 보여주라.', usage: '과제' }, { en: 'The data demonstrates a trend.', ko: '데이터가 추세를 보여준다.', usage: '논증' }, { en: 'She demonstrated the method.', ko: '그녀가 그 방법을 시연했다.', usage: '설명' }] },
+      { w: 'identify', p: '/aɪˈdentɪfaɪ/', d: 'basic', k: '식별하다, 찾아내다', c: 'academic', s: 'recognize, find', a: 'miss', ex: [{ en: 'Identify the main idea.', ko: '핵심 생각을 찾아내라.', usage: '독해' }, { en: 'We identified three causes.', ko: '우리는 세 가지 원인을 찾았다.', usage: '분석' }, { en: 'Identify key terms.', ko: '핵심 용어를 식별하라.', usage: '과제' }] },
+      { w: 'illustrate', p: '/ˈɪləstreɪt/', d: 'important', k: '설명하다, 예시로 보여주다', c: 'academic', s: 'show, exemplify', a: 'obscure', ex: [{ en: 'Illustrate your point with an example.', ko: '예시로 요점을 설명하라.', usage: '에세이' }, { en: 'The graph illustrates the growth.', ko: '그래프가 성장을 보여준다.', usage: '시각' }, { en: 'To illustrate, consider...', ko: '설명하자면 …를 고려하라.', usage: '전환어' }] },
+      { w: 'imply', p: '/ɪmˈplaɪ/', d: 'important', k: '암시하다, 함축하다', c: 'academic', s: 'suggest, indicate', a: 'state directly', ex: [{ en: 'The text implies that...', ko: '텍스트는 …를 암시한다.', usage: '독해' }, { en: 'What does this imply?', ko: '이것이 무엇을 암시하나요?', usage: '질문' }, { en: 'Implication is different from saying.', ko: '암시는 직접 말하기와 다르다.', usage: '구분' }] },
+      { w: 'indicate', p: '/ˈɪndɪkeɪt/', d: 'important', k: '나타내다, 시사하다', c: 'academic', s: 'show, suggest', a: 'hide', ex: [{ en: 'The results indicate a problem.', ko: '결과가 문제를 나타낸다.', usage: '연구' }, { en: 'As indicated in the graph...', ko: '그래프에 나타난 바와 같이 …', usage: '인용' }, { en: 'Evidence indicates that...', ko: '증거는 …를 시사한다.', usage: '결론' }] },
+      { w: 'infer', p: '/ɪnˈfɜːr/', d: 'important', k: '추론하다', c: 'academic', s: 'conclude, deduce', a: 'state directly', ex: [{ en: 'What can we infer from the data?', ko: '데이터로부터 무엇을 추론할 수 있나?', usage: '분석' }, { en: 'The reader may infer that...', ko: '독자는 …라고 추론할 수 있다.', usage: '독해' }, { en: 'Inference requires evidence.', ko: '추론에는 증거가 필요하다.', usage: '논리' }] },
+      { w: 'summarize', p: '/ˈsʌməraɪz/', d: 'basic', k: '요약하다', c: 'academic', s: 'sum up, outline', a: 'expand', ex: [{ en: 'Summarize the article in one paragraph.', ko: '그 글을 한 단락으로 요약하라.', usage: '과제' }, { en: 'To summarize, the main points are...', ko: '요약하면 핵심은 …이다.', usage: '전환어' }, { en: 'She summarized the discussion.', ko: '그녀가 논의를 요약했다.', usage: '회의' }] },
+      { w: 'claim', p: '/kleɪm/', d: 'important', k: '주장 (하다)', c: 'academic', s: 'argument, assert', a: 'disclaim', ex: [{ en: 'The author claims that...', ko: '저자는 …라고 주장한다.', usage: '독해' }, { en: 'Support your claim with evidence.', ko: '주장을 증거로 뒷받침하라.', usage: '에세이' }, { en: 'That claim is not supported.', ko: '그 주장은 뒷받침되지 않는다.', usage: '비판' }] },
+      { w: 'assume', p: '/əˈsuːm/', d: 'important', k: '가정하다, 추정하다', c: 'academic', s: 'suppose, take for granted', a: 'prove', ex: [{ en: 'Assume that the reader is unfamiliar.', ko: '독자가 잘 모른다고 가정하라.', usage: '쓰기' }, { en: 'We assume the data is correct.', ko: '데이터가 맞다고 가정한다.', usage: '연구' }, { en: 'Do not assume; check.', ko: '가정하지 말고 확인하라.', usage: '원칙' }] },
+      { w: 'approach', p: '/əˈproʊtʃ/', d: 'important', k: '접근 (방식), 방법', c: 'academic', s: 'method, way', a: 'avoid', ex: [{ en: 'We took a different approach.', ko: '우리는 다른 접근을 취했다.', usage: '방법' }, { en: 'The approach to the problem matters.', ko: '문제에 대한 접근이 중요하다.', usage: '전략' }, { en: 'A practical approach works best.', ko: '실용적 접근이 가장 잘 통한다.', usage: '조언' }] },
+      { w: 'method', p: '/ˈmeθəd/', d: 'basic', k: '방법, 방식', c: 'academic', s: 'approach, procedure', a: 'chaos', ex: [{ en: 'Describe your method clearly.', ko: '방법을 명확히 서술하라.', usage: '연구' }, { en: 'The scientific method involves testing.', ko: '과학적 방법은 검증을 포함한다.', usage: '과학' }, { en: 'Different methods yield different results.', ko: '방법이 다르면 결과도 다르다.', usage: '비교' }] },
+      { w: 'source', p: '/sɔːrs/', d: 'basic', k: '출처, 자료', c: 'academic', s: 'reference, origin', a: 'copy', ex: [{ en: 'Cite your sources.', ko: '출처를 인용하라.', usage: '에세이' }, { en: 'Primary sources are original.', ko: '1차 자료는 원본이다.', usage: '연구' }, { en: 'The source of the quote is...', ko: '그 인용의 출처는 …이다.', usage: '인용' }] },
+      { w: 'cite', p: '/saɪt/', d: 'important', k: '인용하다', c: 'academic', s: 'quote, reference', a: 'plagiarize', ex: [{ en: 'Always cite your sources.', ko: '항상 출처를 인용하라.', usage: '학술' }, { en: 'She cited three studies.', ko: '그녀는 세 편의 연구를 인용했다.', usage: '논문' }, { en: 'Proper citation avoids plagiarism.', ko: '적절한 인용이 표절을 막는다.', usage: '윤리' }] },
+      { w: 'data', p: '/ˈdeɪtə/', d: 'basic', k: '데이터, 자료', c: 'academic', s: 'information, facts', a: 'opinion', ex: [{ en: 'The data shows a clear trend.', ko: '데이터가 명확한 추세를 보여준다.', usage: '연구' }, { en: 'Collect data before concluding.', ko: '결론 전에 데이터를 수집하라.', usage: '방법' }, { en: 'Data can be qualitative or quantitative.', ko: '데이터는 질적이거나 양적일 수 있다.', usage: '유형' }] },
+      { w: 'research', p: '/rɪˈsɜːrtʃ/', d: 'basic', k: '연구 (하다)', c: 'academic', s: 'investigation, study', a: 'guess', ex: [{ en: 'Research the topic before writing.', ko: '쓰기 전에 주제를 연구하라.', usage: '과제' }, { en: 'Current research suggests...', ko: '최근 연구는 …를 시사한다.', usage: '인용' }, { en: 'She conducted research on...', ko: '그녀는 …에 대한 연구를 수행했다.', usage: '논문' }] },
+      { w: 'theory', p: '/ˈθiːəri/', d: 'important', k: '이론', c: 'academic', s: 'framework, explanation', a: 'practice', ex: [{ en: 'In theory, it should work.', ko: '이론상으로는 효과가 있어야 한다.', usage: '가정' }, { en: 'The theory was later disproven.', ko: '그 이론은 나중에 반증되었다.', usage: '과학' }, { en: 'Apply the theory to the case.', ko: '그 이론을 사례에 적용하라.', usage: '과제' }] },
+      { w: 'structure', p: '/ˈstrʌktʃər/', d: 'basic', k: '구조, 짜임', c: 'academic', s: 'organization, form', a: 'chaos', ex: [{ en: 'The essay has a clear structure.', ko: '그 에세이는 구조가 명확하다.', usage: '쓰기' }, { en: 'Analyze the structure of the argument.', ko: '논증의 구조를 분석하라.', usage: '비판' }, { en: 'Structure your answer.', ko: '답을 구조화하라.', usage: '과제' }] },
+      { w: 'process', p: '/ˈprɑːses/', d: 'basic', k: '과정, 절차', c: 'academic', s: 'procedure, steps', a: 'result only', ex: [{ en: 'Describe the process step by step.', ko: '과정을 단계별로 서술하라.', usage: '설명' }, { en: 'The writing process includes drafting.', ko: '쓰기 과정에는 초안이 포함된다.', usage: '쓰기' }, { en: 'In the process, we learned...', ko: '그 과정에서 우리는 …를 배웠다.', usage: '반성' }] },
+      { w: 'role', p: '/roʊl/', d: 'basic', k: '역할, 기능', c: 'academic', s: 'function, part', a: 'absence', ex: [{ en: 'What is the role of the narrator?', ko: '화자의 역할은 무엇인가?', usage: '문학' }, { en: 'Education plays a key role.', ko: '교육이 핵심 역할을 한다.', usage: '논의' }, { en: 'Consider the role of context.', ko: '맥락의 역할을 고려하라.', usage: '분석' }] },
+      { w: 'impact', p: '/ˈɪmpækt/', d: 'important', k: '영향 (력)', c: 'academic', s: 'effect, influence', a: 'irrelevance', ex: [{ en: 'The impact of the policy was huge.', ko: '그 정책의 영향은 컸다.', usage: '결과' }, { en: 'Consider the impact on society.', ko: '사회에 미치는 영향을 고려하라.', usage: '논의' }, { en: 'Impact can be positive or negative.', ko: '영향은 긍정적이거나 부정적일 수 있다.', usage: '평가' }] },
+      { w: 'issue', p: '/ˈɪʃuː/', d: 'basic', k: '이슈, 쟁점, 문제', c: 'academic', s: 'topic, problem', a: 'non-issue', ex: [{ en: 'The main issue is funding.', ko: '핵심 쟁점은 자금이다.', usage: '논의' }, { en: 'Address the issue directly.', ko: '그 이슈를 직접 다루라.', usage: '에세이' }, { en: 'Complex issues need careful analysis.', ko: '복잡한 쟁점은 신중한 분석이 필요하다.', usage: '접근' }] },
+      { w: 'aspect', p: '/ˈæspekt/', d: 'important', k: '측면, 국면', c: 'academic', s: 'facet, dimension', a: 'whole', ex: [{ en: 'Consider every aspect of the problem.', ko: '문제의 모든 측면을 고려하라.', usage: '분석' }, { en: 'One aspect we overlooked...', ko: '우리가 놓친 한 측면은 …', usage: '반성' }, { en: 'The social aspect is important.', ko: '사회적 측면이 중요하다.', usage: '논의' }] },
+      { w: 'criteria', p: '/kraɪˈtɪriə/', d: 'important', k: '기준', c: 'academic', s: 'standards, measures', a: 'arbitrariness', ex: [{ en: 'State the criteria for success.', ko: '성공의 기준을 제시하라.', usage: '평가' }, { en: 'Meet the criteria to pass.', ko: '통과하려면 기준을 충족하라.', usage: '과제' }, { en: 'Different criteria lead to different results.', ko: '기준이 다르면 결과도 다르다.', usage: '논리' }] },
+      { w: 'valid', p: '/ˈvælɪd/', d: 'important', k: '타당한, 유효한', c: 'academic', s: 'sound, legitimate', a: 'invalid', ex: [{ en: 'Is this a valid argument?', ko: '이것이 타당한 논증인가?', usage: '비판' }, { en: 'The point is valid.', ko: '그 주장은 타당하다.', usage: '동의' }, { en: 'Valid evidence supports the claim.', ko: '타당한 증거가 주장을 뒷받침한다.', usage: '논리' }] },
+      { w: 'relevant', p: '/ˈreləvənt/', d: 'important', k: '관련 있는, 적절한', c: 'academic', s: 'related, pertinent', a: 'irrelevant', ex: [{ en: 'Include only relevant information.', ko: '관련 정보만 포함하라.', usage: '에세이' }, { en: 'Is this relevant to the question?', ko: '이것이 질문과 관련 있나요?', usage: '과제' }, { en: 'Relevant examples strengthen the argument.', ko: '관련 예시가 논증을 강화한다.', usage: '쓰기' }] },
+      { w: 'consistent', p: '/kənˈsɪstənt/', d: 'important', k: '일관된', c: 'academic', s: 'coherent, steady', a: 'inconsistent', ex: [{ en: 'Be consistent in your terminology.', ko: '용어를 일관되게 써라.', usage: '쓰기' }, { en: 'The data is consistent with the theory.', ko: '데이터가 그 이론과 일관된다.', usage: '연구' }, { en: 'Consistent argument is persuasive.', ko: '일관된 논증이 설득력 있다.', usage: '논리' }] },
+      { w: 'contradict', p: '/ˌkɑːntrəˈdɪkt/', d: 'important', k: '모순되다, 반박하다', c: 'academic', s: 'oppose, conflict', a: 'support', ex: [{ en: 'The two sources contradict each other.', ko: '두 출처가 서로 모순된다.', usage: '비교' }, { en: 'Do not contradict your earlier claim.', ko: '앞선 주장과 모순되지 마라.', usage: '쓰기' }, { en: 'Contradiction weakens the argument.', ko: '모순은 논증을 약하게 한다.', usage: '논리' }] },
+      { w: 'contradiction', p: '/ˌkɑːntrəˈdɪkʃn/', d: 'important', k: '모순', c: 'academic', s: 'conflict, inconsistency', a: 'consistency', ex: [{ en: 'There is a contradiction in the text.', ko: '텍스트에 모순이 있다.', usage: '비판' }, { en: 'Resolve the contradiction.', ko: '그 모순을 해소하라.', usage: '과제' }, { en: 'Contradictions suggest error.', ko: '모순은 오류를 시사한다.', usage: '논리' }] },
+      { w: 'contribute', p: '/kənˈtrɪbjuːt/', d: 'basic', k: '기여하다', c: 'academic', s: 'add, help', a: 'detract', ex: [{ en: 'Several factors contribute to success.', ko: '여러 요인이 성공에 기여한다.', usage: '원인' }, { en: 'Contribute to the discussion.', ko: '논의에 기여하라.', usage: '수업' }, { en: 'Her work contributed to the field.', ko: '그녀의 연구가 그 분야에 기여했다.', usage: '평가' }] },
+      { w: 'participate', p: '/pɑːrˈtɪsɪpeɪt/', d: 'basic', k: '참여하다', c: 'academic', s: 'take part, join', a: 'opt out', ex: [{ en: 'Participate in class discussions.', ko: '수업 논의에 참여하라.', usage: '교육' }, { en: 'All students participated.', ko: '모든 학생이 참여했다.', usage: '참여' }, { en: 'Participation is graded.', ko: '참여도가 평가된다.', usage: '평가' }] },
+      { w: 'discuss', p: '/dɪˈskʌs/', d: 'basic', k: '논의하다, 토론하다', c: 'academic', s: 'talk about, debate', a: 'ignore', ex: [{ en: 'Discuss the pros and cons.', ko: '장단점을 논의하라.', usage: '과제' }, { en: 'We will discuss this in class.', ko: '이것을 수업에서 논의할 것이다.', usage: '수업' }, { en: 'The essay discusses three themes.', ko: '그 에세이는 세 가지 주제를 논의한다.', usage: '구조' }] },
+      { w: 'debate', p: '/dɪˈbeɪt/', d: 'important', k: '토론 (하다), 논쟁', c: 'academic', s: 'argue, discuss', a: 'agree', ex: [{ en: 'There is debate about the cause.', ko: '원인에 대한 논쟁이 있다.', usage: '학계' }, { en: 'Debate both sides fairly.', ko: '양쪽을 공정하게 토론하라.', usage: '에세이' }, { en: 'The debate continues.', ko: '논쟁이 계속된다.', usage: '현황' }] },
+      { w: 'opinion', p: '/əˈpɪnjən/', d: 'basic', k: '의견, 견해', c: 'academic', s: 'view, belief', a: 'fact', ex: [{ en: 'State your opinion clearly.', ko: '의견을 명확히 제시하라.', usage: '에세이' }, { en: 'Opinions should be supported.', ko: '의견은 뒷받침되어야 한다.', usage: '논리' }, { en: 'In my opinion, ...', ko: '제 견해로는 …', usage: '표현' }] },
+      { w: 'viewpoint', p: '/ˈvjuːpɔɪnt/', d: 'important', k: '관점, 입장', c: 'academic', s: 'perspective, stance', a: 'bias', ex: [{ en: 'Consider the author\'s viewpoint.', ko: '저자의 관점을 고려하라.', usage: '독해' }, { en: 'From my viewpoint, ...', ko: '제 관점에서 …', usage: '표현' }, { en: 'Multiple viewpoints enrich the discussion.', ko: '여러 관점이 논의를 풍부하게 한다.', usage: '논의' }] },
+      { w: 'however', p: '/haʊˈevər/', d: 'basic', k: '그러나, 하지만', c: 'academic', s: 'but, yet', a: 'therefore', ex: [{ en: 'However, the results differed.', ko: '그러나 결과는 달랐다.', usage: '대조' }, { en: 'However we look at it...', ko: '어떻게 보든 …', usage: '관점' }, { en: 'However is a contrast transition.', ko: 'However는 대조 전환어다.', usage: '쓰기' }] },
+      { w: 'therefore', p: '/ˈðerfɔːr/', d: 'basic', k: '따라서, 그러므로', c: 'academic', s: 'thus, so', a: 'however', ex: [{ en: 'The data was weak; therefore we repeated.', ko: '데이터가 약했으므로 우리는 반복했다.', usage: '논리' }, { en: 'Therefore, we conclude that...', ko: '따라서 우리는 …라고 결론 내린다.', usage: '결론' }, { en: 'Use therefore for cause-effect.', ko: '인과 관계에 therefore를 써라.', usage: '쓰기' }] },
+      { w: 'furthermore', p: '/ˌfɜːrðərˈmɔːr/', d: 'important', k: '더욱이, 또한', c: 'academic', s: 'moreover, in addition', a: 'however', ex: [{ en: 'Furthermore, the data shows...', ko: '더욱이 데이터는 …를 보여준다.', usage: '추가' }, { en: 'Furthermore, we must consider...', ko: '또한 …를 고려해야 한다.', usage: '논증' }, { en: 'Use furthermore to add points.', ko: '추가할 때 furthermore를 써라.', usage: '쓰기' }] },
+      { w: 'consequently', p: '/ˈkɑːnsɪkwentli/', d: 'important', k: '그 결과로, 따라서', c: 'academic', s: 'as a result, therefore', a: 'nevertheless', ex: [{ en: 'Funding was cut; consequently, the project stopped.', ko: '자금이 삭감되어 그 결과 프로젝트가 중단되었다.', usage: '인과' }, { en: 'Consequently, we need a new plan.', ko: '따라서 새 계획이 필요하다.', usage: '결론' }, { en: 'Consequently links cause and effect.', ko: 'Consequently는 원인과 결과를 잇는다.', usage: '쓰기' }] },
+      { w: 'although', p: '/ɔːlˈðoʊ/', d: 'basic', k: '비록 …이지만', c: 'academic', s: 'though, while', a: 'because', ex: [{ en: 'Although it was difficult, we succeeded.', ko: '어려웠지만 우리는 성공했다.', usage: '양보' }, { en: 'Although the sample was small...', ko: '표본이 작았지만 …', usage: '한계' }, { en: 'Use although for contrast.', ko: '대조할 때 although를 써라.', usage: '쓰기' }] },
+      { w: 'whereas', p: '/werˈæz/', d: 'important', k: '반면 …인데 (대조)', c: 'academic', s: 'while, in contrast', a: 'similarly', ex: [{ en: 'Group A improved, whereas Group B did not.', ko: 'A군은 향상되었으나 B군은 그렇지 않았다.', usage: '비교' }, { en: 'Whereas X claims..., Y argues...', ko: 'X는 …라고 하는 반면 Y는 …라고 주장한다.', usage: '대조' }, { en: 'Whereas shows contrast.', ko: 'Whereas는 대조를 보여준다.', usage: '쓰기' }] },
+      { w: 'similarly', p: '/ˈsɪmələrli/', d: 'important', k: '유사하게, 마찬가지로', c: 'academic', s: 'likewise, in the same way', a: 'in contrast', ex: [{ en: 'Similarly, the second study found...', ko: '마찬가지로 두 번째 연구는 …를 발견했다.', usage: '비교' }, { en: 'Similarly, we can say that...', ko: '유사하게 우리는 …라고 말할 수 있다.', usage: '논증' }, { en: 'Use similarly for comparison.', ko: '비교할 때 similarly를 써라.', usage: '쓰기' }] },
+      { w: 'specifically', p: '/spəˈsɪfɪkli/', d: 'important', k: '구체적으로, 특히', c: 'academic', s: 'in particular', a: 'generally', ex: [{ en: 'Specifically, we focused on...', ko: '구체적으로 우리는 …에 집중했다.', usage: '범위' }, { en: 'Be specifically clear.', ko: '구체적으로 명확히 하라.', usage: '쓰기' }, { en: 'Specifically, the problem is...', ko: '특히 문제는 …이다.', usage: '설명' }] },
+      { w: 'generally', p: '/ˈdʒenrəli/', d: 'basic', k: '일반적으로, 대체로', c: 'academic', s: 'usually, in general', a: 'specifically', ex: [{ en: 'Generally, the trend is upward.', ko: '일반적으로 추세는 상승이다.', usage: '결과' }, { en: 'It is generally agreed that...', ko: '…라는 데 대체로 동의한다.', usage: '합의' }, { en: 'Generally speaking, ...', ko: '일반적으로 말하면 …', usage: '표현' }] },
+      { w: 'paragraph', p: '/ˈpærəɡræf/', d: 'basic', k: '단락', c: 'academic', s: 'section, block', a: 'whole essay', ex: [{ en: 'Each paragraph should have one main idea.', ko: '각 단락은 하나의 핵심 생각을 가져야 한다.', usage: '쓰기' }, { en: 'The first paragraph introduces the topic.', ko: '첫 단락이 주제를 소개한다.', usage: '구조' }, { en: 'Start a new paragraph for a new point.', ko: '새로운 요점마다 새 단락을 시작하라.', usage: '조직' }] },
+      { w: 'thesis', p: '/ˈθiːsɪs/', d: 'important', k: '논지, 중심 주장', c: 'academic', s: 'main argument', a: 'tangent', ex: [{ en: 'State your thesis in the introduction.', ko: '서론에서 논지를 제시하라.', usage: '에세이' }, { en: 'The thesis guides the whole essay.', ko: '논지가 전체 에세이를 이끈다.', usage: '역할' }, { en: 'A clear thesis strengthens the essay.', ko: '명확한 논지가 에세이를 강하게 한다.', usage: '쓰기' }] },
+      { w: 'introduction', p: '/ˌɪntrəˈdʌkʃn/', d: 'basic', k: '서론, 도입', c: 'academic', s: 'opening, lead-in', a: 'conclusion', ex: [{ en: 'The introduction should hook the reader.', ko: '서론이 독자의 관심을 끌어야 한다.', usage: '쓰기' }, { en: 'In the introduction, we present...', ko: '서론에서 우리는 …를 제시한다.', usage: '구조' }, { en: 'Write the introduction last if needed.', ko: '필요하면 서론을 나중에 써라.', usage: '조언' }] },
+      { w: 'conclusion', p: '/kənˈkluːʒn/', d: 'basic', k: '결론', c: 'academic', s: 'ending, summary', a: 'introduction', ex: [{ en: 'The conclusion should restate the thesis.', ko: '결론에서 논지를 다시 제시하라.', usage: '에세이' }, { en: 'In conclusion, we find that...', ko: '결론적으로 우리는 …를 발견한다.', usage: '전환어' }, { en: 'Do not introduce new ideas in the conclusion.', ko: '결론에서 새로운 생각을 도입하지 마라.', usage: '쓰기' }] },
+      { w: 'draft', p: '/dræft/', d: 'basic', k: '초안 (쓰다)', c: 'academic', s: 'rough version', a: 'final', ex: [{ en: 'Write a first draft before editing.', ko: '편집 전에 초안을 써라.', usage: '과정' }, { en: 'The draft needs revision.', ko: '그 초안은 수정이 필요하다.', usage: '피드백' }, { en: 'Draft your answer first.', ko: '먼저 답의 초안을 써라.', usage: '과제' }] },
+      { w: 'revise', p: '/rɪˈvaɪz/', d: 'important', k: '수정하다, 개정하다', c: 'academic', s: 'edit, improve', a: 'leave as is', ex: [{ en: 'Revise your essay for clarity.', ko: '명확성을 위해 에세이를 수정하라.', usage: '쓰기' }, { en: 'After feedback, revise the draft.', ko: '피드백 후 초안을 수정하라.', usage: '과정' }, { en: 'Revision is part of good writing.', ko: '수정은 좋은 글쓰기의 일부다.', usage: '원칙' }] },
+      { w: 'coherent', p: '/koʊˈhɪrənt/', d: 'important', k: '일관된, 논리적으로 잇따른', c: 'academic', s: 'logical, connected', a: 'incoherent', ex: [{ en: 'The argument must be coherent.', ko: '논증은 일관되어야 한다.', usage: '논리' }, { en: 'Write coherent paragraphs.', ko: '일관된 단락을 써라.', usage: '쓰기' }, { en: 'Coherence helps the reader follow.', ko: '일관성이 독자가 따라가게 돕는다.', usage: '가독성' }] },
+      { w: 'clarify', p: '/ˈklærɪfaɪ/', d: 'important', k: '명확히 하다, 설명하다', c: 'academic', s: 'explain, make clear', a: 'obscure', ex: [{ en: 'Clarify your main point.', ko: '핵심을 명확히 하라.', usage: '쓰기' }, { en: 'Could you clarify what you mean?', ko: '무슨 뜻인지 설명해 주시겠어요?', usage: '질문' }, { en: 'Clarification is often needed.', ko: '설명이 자주 필요하다.', usage: '소통' }] },
+      { w: 'emphasize', p: '/ˈemfəsaɪz/', d: 'important', k: '강조하다', c: 'academic', s: 'stress, highlight', a: 'downplay', ex: [{ en: 'Emphasize the key finding.', ko: '핵심 발견을 강조하라.', usage: '쓰기' }, { en: 'The author emphasizes that...', ko: '저자는 …를 강조한다.', usage: '독해' }, { en: 'Emphasis can change meaning.', ko: '강조가 의미를 바꿀 수 있다.', usage: '효과' }] },
+      { w: 'implication', p: '/ˌɪmplɪˈkeɪʃn/', d: 'important', k: '함축, 시사점', c: 'academic', s: 'suggestion, consequence', a: 'explicit statement', ex: [{ en: 'The implication is that...', ko: '그 함축은 …라는 것이다.', usage: '독해' }, { en: 'Consider the implications.', ko: '시사점을 고려하라.', usage: '분석' }, { en: 'Implications may be unintended.', ko: '함축이 의도치 않을 수 있다.', usage: '해석' }] },
+      { w: 'assumption', p: '/əˈsʌmpʃn/', d: 'important', k: '가정', c: 'academic', s: 'presumption, premise', a: 'conclusion', ex: [{ en: 'State your assumptions clearly.', ko: '가정을 명확히 제시하라.', usage: '논증' }, { en: 'The assumption may be wrong.', ko: '그 가정이 틀렸을 수 있다.', usage: '비판' }, { en: 'Question hidden assumptions.', ko: '숨은 가정을 질문하라.', usage: '비판적 사고' }] },
+      { w: 'premise', p: '/ˈpremɪs/', d: 'advanced', k: '전제 (논증의 출발점)', c: 'academic', s: 'assumption, basis', a: 'conclusion', ex: [{ en: 'The premise of the argument is...', ko: '그 논증의 전제는 …이다.', usage: '논리' }, { en: 'If the premise is false, the conclusion fails.', ko: '전제가 거짓이면 결론도 성립하지 않는다.', usage: '논리' }, { en: 'Examine the premise first.', ko: '먼저 전제를 검토하라.', usage: '비판' }] },
+      { w: 'bias', p: '/ˈbaɪəs/', d: 'important', k: '편견, 치우침', c: 'academic', s: 'prejudice, slant', a: 'objectivity', ex: [{ en: 'Consider possible bias in the source.', ko: '출처의 가능한 편견을 고려하라.', usage: '비판' }, { en: 'The author has a bias toward...', ko: '저자는 …에 대한 편견이 있다.', usage: '독해' }, { en: 'Bias can affect research.', ko: '편견이 연구에 영향을 줄 수 있다.', usage: '연구' }] },
+      { w: 'objective', p: '/əbˈdʒektɪv/', d: 'important', k: '객관적인, 목표', c: 'academic', s: 'unbiased, goal', a: 'subjective', ex: [{ en: 'Try to be objective in your analysis.', ko: '분석에서 객관적이려 하라.', usage: '연구' }, { en: 'The objective of the study was...', ko: '그 연구의 목표는 …였다.', usage: '목적' }, { en: 'Objective writing avoids opinion.', ko: '객관적 글쓰기는 의견을 피한다.', usage: '쓰기' }] },
+      { w: 'subjective', p: '/səbˈdʒektɪv/', d: 'important', k: '주관적인', c: 'academic', s: 'personal, biased', a: 'objective', ex: [{ en: 'Personal response is subjective.', ko: '개인적 반응은 주관적이다.', usage: '성격' }, { en: 'Subjective views can still be argued.', ko: '주관적 견해도 논증될 수 있다.', usage: '에세이' }, { en: 'Distinguish subjective from objective.', ko: '주관과 객관을 구분하라.', usage: '비판' }] },
+      { w: 'primary', p: '/ˈpraɪmeri/', d: 'important', k: '1차의, 주요한 (자료)', c: 'academic', s: 'first-hand, main', a: 'secondary', ex: [{ en: 'Primary sources are original documents.', ko: '1차 자료는 원본 문서다.', usage: '연구' }, { en: 'The primary cause is...', ko: '주요 원인은 …이다.', usage: '원인' }, { en: 'Use primary sources when possible.', ko: '가능하면 1차 자료를 써라.', usage: '연구' }] },
+      { w: 'secondary', p: '/ˈsekənderi/', d: 'important', k: '2차의, 부차적인', c: 'academic', s: 'derived, second-hand', a: 'primary', ex: [{ en: 'Secondary sources analyze primary ones.', ko: '2차 자료는 1차 자료를 분석한다.', usage: '연구' }, { en: 'Secondary sources are useful too.', ko: '2차 자료도 유용하다.', usage: '연구' }, { en: 'Cite both primary and secondary.', ko: '1차와 2차 모두 인용하라.', usage: '인용' }] },
+      { w: 'reference', p: '/ˈrefrəns/', d: 'basic', k: '참조, 인용', c: 'academic', s: 'citation, source', a: 'original', ex: [{ en: 'Include a reference list.', ko: '참고 문헌 목록을 포함하라.', usage: '에세이' }, { en: 'Reference the text when you quote.', ko: '인용할 때 텍스트를 참조하라.', usage: '인용' }, { en: 'References must be consistent.', ko: '참조 형식은 일관되어야 한다.', usage: '형식' }] },
+      { w: 'plagiarism', p: '/ˈpleɪdʒərɪzəm/', d: 'important', k: '표절', c: 'academic', s: 'copying without credit', a: 'original work', ex: [{ en: 'Plagiarism is academic dishonesty.', ko: '표절은 학술적 부정행위다.', usage: '윤리' }, { en: 'Avoid plagiarism by citing.', ko: '인용으로 표절을 피하라.', usage: '방법' }, { en: 'Plagiarism can have serious consequences.', ko: '표절은 심각한 결과를 낳을 수 있다.', usage: '경고' }] },
+      { w: 'acknowledge', p: '/əkˈnɑːlɪdʒ/', d: 'important', k: '인정하다, 감사하다 (출처 등)', c: 'academic', s: 'recognize, cite', a: 'ignore', ex: [{ en: 'Acknowledge your sources.', ko: '출처를 인정하라.', usage: '인용' }, { en: 'The author acknowledges that...', ko: '저자는 …를 인정한다.', usage: '독해' }, { en: 'Acknowledgments thank contributors.', ko: '감사의 말은 기여자에게 감사한다.', usage: '논문' }] },
+      { w: 'feedback', p: '/ˈfiːdbæk/', d: 'basic', k: '피드백, 의견', c: 'academic', s: 'response, comment', a: 'silence', ex: [{ en: 'Use feedback to improve.', ko: '피드백을 활용해 개선하라.', usage: '학습' }, { en: 'The teacher gave feedback on the draft.', ko: '선생님이 초안에 피드백을 주셨다.', usage: '쓰기' }, { en: 'Constructive feedback helps.', ko: '건설적 피드백이 도움이 된다.', usage: '품질' }] },
+      { w: 'critique', p: '/krɪˈtiːk/', d: 'important', k: '비판 (하다), 논평', c: 'academic', s: 'critical review', a: 'praise only', ex: [{ en: 'Write a critique of the article.', ko: '그 글에 대한 비판을 써라.', usage: '과제' }, { en: 'A good critique is fair.', ko: '좋은 비판은 공정하다.', usage: '원칙' }, { en: 'Critique strengthens your argument.', ko: '비판이 논증을 강하게 한다.', usage: '역할' }] },
+      { w: 'reflect', p: '/rɪˈflekt/', d: 'important', k: '성찰하다, 반성하다', c: 'academic', s: 'think about, consider', a: 'ignore', ex: [{ en: 'Reflect on what you learned.', ko: '배운 것을 성찰하라.', usage: '학습' }, { en: 'The essay reflects her views.', ko: '그 에세이는 그녀의 견해를 반영한다.', usage: '쓰기' }, { en: 'Reflection improves understanding.', ko: '성찰이 이해를 높인다.', usage: '가치' }] },
+      { w: 'respond', p: '/rɪˈspɑːnd/', d: 'basic', k: '반응하다, 답하다', c: 'academic', s: 'reply, react', a: 'ignore', ex: [{ en: 'Respond to the question fully.', ko: '질문에 충분히 답하라.', usage: '과제' }, { en: 'How did the character respond?', ko: '그 인물은 어떻게 반응했나?', usage: '독해' }, { en: 'Response time matters in discussion.', ko: '논의에서 반응 시간이 중요하다.', usage: '토론' }] },
+      { w: 'require', p: '/rɪˈkwaɪər/', d: 'basic', k: '요구하다, 필요로 하다', c: 'academic', s: 'need, demand', a: 'optional', ex: [{ en: 'The task requires three sources.', ko: '그 과제는 출처 3개를 요구한다.', usage: '과제' }, { en: 'Critical thinking requires practice.', ko: '비판적 사고는 연습이 필요하다.', usage: '능력' }, { en: 'Requirements are in the rubric.', ko: '요구 사항은 채점 기준에 있다.', usage: '평가' }] },
+      { w: 'achieve', p: '/əˈtʃiːv/', d: 'basic', k: '달성하다, 이루다', c: 'academic', s: 'accomplish, reach', a: 'fail', ex: [{ en: 'We achieved our learning goals.', ko: '우리는 학습 목표를 달성했다.', usage: '목표' }, { en: 'To achieve a high grade...', ko: '높은 점수를 받으려면 …', usage: '과제' }, { en: 'Achievement requires effort.', ko: '달성에는 노력이 필요하다.', usage: '원칙' }] },
+      { w: 'establish', p: '/ɪˈstæblɪʃ/', d: 'important', k: '설립하다, 확립하다', c: 'academic', s: 'set up, prove', a: 'disprove', ex: [{ en: 'The author establishes the context first.', ko: '저자가 먼저 맥락을 확립한다.', usage: '쓰기' }, { en: 'We need to establish the facts.', ko: '사실을 확립해야 한다.', usage: '논증' }, { en: 'Establish your credibility.', ko: '신뢰를 확립하라.', usage: '에세이' }] },
+      { w: 'maintain', p: '/meɪnˈteɪn/', d: 'important', k: '유지하다, 주장하다', c: 'academic', s: 'keep, argue', a: 'abandon', ex: [{ en: 'Maintain a consistent tone.', ko: '일관된 어조를 유지하라.', usage: '쓰기' }, { en: 'She maintains that the data is valid.', ko: '그녀는 그 데이터가 타당하다고 주장한다.', usage: '논증' }, { en: 'Maintain your focus.', ko: '집중을 유지하라.', usage: '조언' }] },
+      { w: 'occur', p: '/əˈkɜːr/', d: 'important', k: '발생하다, 일어나다', c: 'academic', s: 'happen, take place', a: 'prevent', ex: [{ en: 'Errors occur when we rush.', ko: '서두르면 오류가 발생한다.', usage: '원인' }, { en: 'When did the change occur?', ko: '그 변화는 언제 일어났나?', usage: '질문' }, { en: 'It occurred to me that...', ko: '…라는 생각이 들었다.', usage: '표현' }] },
+      { w: 'vary', p: '/ˈveri/', d: 'important', k: '다르다, 달라지다', c: 'academic', s: 'differ, change', a: 'stay same', ex: [{ en: 'Results vary by group.', ko: '결과는 집단마다 다르다.', usage: '연구' }, { en: 'Opinions vary on this issue.', ko: '이 쟁점에 대한 의견이 다르다.', usage: '논의' }, { en: 'Vary your sentence structure.', ko: '문장 구조를 다양하게 하라.', usage: '쓰기' }] },
+      { w: 'appropriate', p: '/əˈproʊpriət/', d: 'important', k: '적절한, 적합한', c: 'academic', s: 'suitable, fitting', a: 'inappropriate', ex: [{ en: 'Use appropriate language for the audience.', ko: '청중에 맞는 적절한 말을 써라.', usage: '쓰기' }, { en: 'Is this source appropriate?', ko: '이 출처가 적절한가?', usage: '연구' }, { en: 'An appropriate tone is formal.', ko: '적절한 어조는 격식체다.', usage: '학술' }] },
+      { w: 'complex', p: '/kəmˈpleks/', d: 'important', k: '복잡한', c: 'academic', s: 'complicated, intricate', a: 'simple', ex: [{ en: 'The issue is complex.', ko: '그 쟁점은 복잡하다.', usage: '논의' }, { en: 'Deal with complex ideas step by step.', ko: '복잡한 생각을 단계별로 다루라.', usage: '쓰기' }, { en: 'Complexity requires careful analysis.', ko: '복잡성은 신중한 분석을 요구한다.', usage: '접근' }] },
+      { w: 'distinct', p: '/dɪˈstɪŋkt/', d: 'important', k: '뚜렷한, 구별되는', c: 'academic', s: 'clear, separate', a: 'vague', ex: [{ en: 'There are three distinct phases.', ko: '뚜렷한 세 단계가 있다.', usage: '구조' }, { en: 'Keep your ideas distinct.', ko: '생각을 구별되게 유지하라.', usage: '쓰기' }, { en: 'Distinct from the previous point...', ko: '앞의 요점과 구별되게 …', usage: '대조' }] },
+      { w: 'element', p: '/ˈelɪmənt/', d: 'basic', k: '요소, 구성 요소', c: 'academic', s: 'component, part', a: 'whole', ex: [{ en: 'Key elements of a good essay.', ko: '좋은 에세이의 핵심 요소.', usage: '쓰기' }, { en: 'Each element contributes to the whole.', ko: '각 요소가 전체에 기여한다.', usage: '구조' }, { en: 'Identify the main elements.', ko: '주요 요소를 식별하라.', usage: '분석' }] },
+      { w: 'feature', p: '/ˈfiːtʃər/', d: 'basic', k: '특징, 속성', c: 'academic', s: 'characteristic, aspect', a: 'absence', ex: [{ en: 'A key feature of the text is...', ko: '그 텍스트의 핵심 특징은 …이다.', usage: '독해' }, { en: 'The software has new features.', ko: '그 소프트웨어에 새 기능이 있다.', usage: '설명' }, { en: 'Feature analysis helps comparison.', ko: '특징 분석이 비교를 돕는다.', usage: '방법' }] },
+      { w: 'typically', p: '/ˈtɪpɪkli/', d: 'important', k: '전형적으로, 보통', c: 'academic', s: 'usually, normally', a: 'exceptionally', ex: [{ en: 'Typically, such studies take years.', ko: '보통 그런 연구는 수 년 걸린다.', usage: '일반화' }, { en: 'The pattern is typically...', ko: '그 패턴은 전형적으로 …이다.', usage: '설명' }, { en: 'Typically is used for norms.', ko: 'Typically는 보통의 경우에 쓴다.', usage: '쓰기' }] }
+    ];
+
+    // --- SPEECH ---
+    function speak(text, rate = 0.8) {
+      if (!window.speechSynthesis) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = rate;
+      u.lang = 'en-US';
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }
+
+    // --- DIFFICULTY BADGE ---
+    function DifficultyBadge({ difficulty }) {
+      const config = { basic: { label: 'Basic', color: 'bg-green-500', icon: '🟢' }, important: { label: 'Important', color: 'bg-yellow-500', icon: '🟡' }, advanced: { label: 'Advanced', color: 'bg-red-500', icon: '🔴' } };
+      const c = config[difficulty] || config.basic;
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs font-medium ${c.color}`}>
+          <span>{c.icon}</span> {c.label}
+        </span>
+      );
+    }
+
+    // --- LIBRARY VIEW ---
+    function Library({ onSelectBook }) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <h1 className="text-3xl font-bold text-slate-800 text-center mb-2">Vocabulary Learner</h1>
+          <p className="text-slate-600 text-center mb-8">Choose a book to study or quiz</p>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {BOOKS.map(book => {
+              const words = book.getWords();
+              const studied = getStudiedSet(book.id);
+              const studiedCount = words.filter(w => studied.has(w.word)).length;
+              const pct = words.length ? Math.round((studiedCount / words.length) * 100) : 0;
+              const todayBatch = getTodayBatch(book.id);
+              const todayCount = todayBatch.length;
+              const todayDone = todayCount >= WORDS_PER_DAY;
+              return (
+                <button
+                  key={book.id}
+                  onClick={() => onSelectBook(book)}
+                  className={`text-left rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br ${book.bgLight} border border-white/50 hover:scale-[1.02] active:scale-[0.98]`}
+                >
+                  <div className={`h-2 rounded-full mb-4 bg-gradient-to-r ${book.gradient}`} style={{ width: `${pct}%` }} />
+                  <p className="text-sm text-slate-600 font-medium">{book.author}</p>
+                  <h2 className="text-xl font-bold text-slate-800 mt-1">{book.title}</h2>
+                  <p className="text-xs text-slate-500 mt-1">{book.level}</p>
+                  <p className="text-slate-600 text-sm mt-2">{studiedCount} / {words.length} 총 학습</p>
+                  <p className={`text-sm mt-1 font-medium ${todayDone ? 'text-green-600' : 'text-slate-600'}`}>
+                    오늘 {todayDone ? `${WORDS_PER_DAY}/${WORDS_PER_DAY} 완료` : `${todayCount}/${WORDS_PER_DAY}`}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // --- STUDY MODE ---
+    function StudyMode({ book, onBack }) {
+      const words = useMemo(() => book.getWords(), [book.id]);
+      const [pool, setPool] = useState([]);
+      const [index, setIndex] = useState(0);
+      const [justMarked, setJustMarked] = useState(false);
+
+      // 세션 시작 시: 오늘 이미 15개 했으면 풀 비움. 아니면 미학습 15개로 풀 생성
+      useEffect(() => {
+        const todayBatch = getTodayBatch(book.id);
+        if (todayBatch.length >= WORDS_PER_DAY) {
+          setPool([]);
+          setIndex(0);
+          setJustMarked(false);
+          return;
+        }
+        const studiedSet = getStudiedSet(book.id);
+        const unstudied = words.filter(w => !studiedSet.has(w.word));
+        const shuffled = [...unstudied].sort(() => Math.random() - 0.5);
+        setPool(shuffled.slice(0, WORDS_PER_DAY));
+        setIndex(0);
+        setJustMarked(false);
+      }, [book.id]);
+
+      const current = pool[index];
+      const handleMarkStudied = useCallback(() => {
+        if (!current) return;
+        markStudied(book.id, current.word);
+        const isLastOfBatch = index >= pool.length - 1;
+        if (isLastOfBatch && pool.length > 0) {
+          const batchWords = pool.map(w => w.word);
+          saveTodayBatch(book.id, batchWords);
+        }
+        setJustMarked(true);
+        setTimeout(() => {
+          if (index < pool.length - 1) setIndex(i => i + 1);
+          else setIndex(pool.length);
+          setJustMarked(false);
+        }, 400);
+      }, [book.id, current, index, pool]);
+
+      const todayDone = getTodayBatch(book.id).length >= WORDS_PER_DAY;
+      if (!current) {
+        return (
+          <div className="max-w-2xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6 flex items-center gap-2">← Back to menu</button>
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <p className="text-lg text-slate-600">
+                {todayDone ? '오늘 학습을 완료했습니다. 퀴즈로 복습해 보세요!' : pool.length === 0 ? '이 책의 미학습 단어가 없습니다.' : "오늘 분량을 마쳤습니다. 잘했어요!"}
+              </p>
+              <button onClick={onBack} className="mt-4 px-6 py-2 bg-slate-200 rounded-lg hover:bg-slate-300">메뉴로 돌아가기</button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
+          <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-4 flex items-center gap-2">← Back to menu</button>
+          <div className={`rounded-2xl shadow-xl overflow-hidden border border-slate-200 bg-gradient-to-br ${book.bgLight} ${justMarked ? 'ring-2 ring-green-400' : ''}`}>
+            <div className="p-6 sm:p-8 bg-white/80 backdrop-blur">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <DifficultyBadge difficulty={current.difficulty} />
+                <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-xs">{current.category}</span>
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-2">{current.word}</h2>
+              <div className="flex items-center gap-2 mb-2">
+                <button type="button" onClick={() => speak(current.word, 0.8)} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700" aria-label="Pronounce">🔊</button>
+                <span className="text-slate-500 text-sm font-mono">{current.pronunciation}</span>
+              </div>
+              <p className="text-xl sm:text-2xl text-slate-800 font-medium mb-4">{current.koreanMeaning}</p>
+              {current.synonyms && <p className="text-sm text-slate-600"><span className="font-medium">Synonyms:</span> {current.synonyms}</p>}
+              {current.antonyms && <p className="text-sm text-slate-600 mt-1"><span className="font-medium">Antonyms:</span> {current.antonyms}</p>}
+              <div className="mt-6 space-y-4">
+                {current.examples.map((ex, i) => (
+                  <div key={i} className="pl-4 border-l-4 border-slate-300">
+                    <p className="text-slate-800">{ex.en}</p>
+                    <p className="text-slate-600 text-sm mt-1">{ex.ko}</p>
+                    <p className="text-slate-500 text-xs mt-1 italic">{ex.usage}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-4 bg-white/60 flex justify-between items-center">
+              <span className="text-sm text-slate-600">오늘의 단어 ({index + 1} / {pool.length})</span>
+              <button onClick={handleMarkStudied} className={`px-6 py-2 rounded-xl font-medium transition-all ${justMarked ? 'bg-green-500 text-white' : `bg-gradient-to-r ${book.gradient} text-white hover:opacity-90`}`}>공부함</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // --- QUIZ MULTIPLE CHOICE ---
+    function QuizMultipleChoice({ book, onBack }) {
+      const words = useMemo(() => book.getWords(), [book.id]);
+      const [questions, setQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [selected, setSelected] = useState(null);
+      const [feedback, setFeedback] = useState(null);
+
+      useEffect(() => {
+        const todayBatchSet = new Set(getTodayBatch(book.id));
+        const todayWords = words.filter(w => todayBatchSet.has(w.word));
+        const shuffled = [...todayWords].sort(() => Math.random() - 0.5).slice(0, Math.min(20, todayWords.length));
+        setQuestions(shuffled.map(w => ({
+          word: w.word,
+          pronunciation: w.pronunciation,
+          correct: w.koreanMeaning,
+          options: (() => {
+            const others = shuffled.filter(x => x.word !== w.word).map(x => x.koreanMeaning);
+            const opts = [w.koreanMeaning, ...others.sort(() => Math.random() - 0.5).slice(0, 3)];
+            return opts.sort(() => Math.random() - 0.5);
+          })()
+        })));
+        setCurrentIndex(0);
+        setSelected(null);
+        setFeedback(null);
+      }, [book.id]);
+
+      const q = questions[currentIndex];
+      if (questions.length === 0) {
+        return (
+          <div className="max-w-xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6">← Back to menu</button>
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <p className="text-lg text-slate-600">오늘 공부한 단어가 없습니다. 먼저 오늘 분량(15단어)을 공부한 뒤 퀴즈를 풀어보세요.</p>
+              <button onClick={onBack} className="mt-4 px-6 py-2 bg-slate-200 rounded-lg hover:bg-slate-300">메뉴로 돌아가기</button>
+            </div>
+          </div>
+        );
+      }
+      if (!q) {
+        return (
+          <div className="max-w-xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6">← Back to menu</button>
+            <div className="text-center text-slate-600">Loading...</div>
+          </div>
+        );
+      }
+
+      const handleChoice = (opt) => {
+        if (feedback !== null) return;
+        setSelected(opt);
+        setFeedback(opt === q.correct ? 'correct' : 'wrong');
+      };
+
+      const next = () => {
+        setSelected(null);
+        setFeedback(null);
+        setCurrentIndex(i => i + 1);
+      };
+
+      const progress = questions.length ? ((currentIndex + (feedback ? 1 : 0)) / questions.length) * 100 : 0;
+
+      return (
+        <div className="max-w-xl mx-auto px-4 py-6">
+          <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-4">← Back to menu</button>
+          <div className="h-2 rounded-full bg-slate-200 mb-6 overflow-hidden">
+            <div className={`h-full rounded-full bg-gradient-to-r ${book.gradient} transition-all duration-300`} style={{ width: `${progress}%` }} />
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+            <p className="text-slate-500 font-mono text-sm mb-2">{q.pronunciation}</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-6">What does &quot;{q.word}&quot; mean?</h2>
+            <div className="space-y-3">
+              {q.options.map(opt => (
+                <button
+                  key={opt}
+                  onClick={() => handleChoice(opt)}
+                  disabled={feedback !== null}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
+                    feedback === null ? 'border-slate-200 hover:border-slate-400 hover:bg-slate-50' :
+                    opt === q.correct ? 'border-green-500 bg-green-50 text-green-800' :
+                    opt === selected ? 'border-red-500 bg-red-50 text-red-800' : 'border-slate-200 bg-slate-50 opacity-75'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            {feedback && (
+              <div className={`mt-4 p-3 rounded-lg ${feedback === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                {feedback === 'correct' ? '✓ Correct!' : `✗ Correct: ${q.correct}`}
+              </div>
+            )}
+            {feedback && currentIndex < questions.length - 1 && (
+              <button onClick={next} className={`mt-4 w-full py-2 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white`}>Next</button>
+            )}
+            {feedback && currentIndex >= questions.length - 1 && (
+              <button onClick={onBack} className="mt-4 w-full py-2 rounded-xl font-medium bg-slate-200 text-slate-800">Back to menu</button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- QUIZ FILL IN BLANK ---
+    function QuizFillBlank({ book, onBack }) {
+      const words = useMemo(() => book.getWords(), [book.id]);
+      const [questions, setQuestions] = useState([]);
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [input, setInput] = useState('');
+      const [feedback, setFeedback] = useState(null);
+
+      useEffect(() => {
+        const todayBatchSet = new Set(getTodayBatch(book.id));
+        const todayWords = words.filter(w => todayBatchSet.has(w.word));
+        const withExamples = todayWords.filter(w => w.examples && w.examples.length > 0);
+        const shuffled = [...withExamples].sort(() => Math.random() - 0.5).slice(0, Math.min(15, withExamples.length));
+        setQuestions(shuffled.map(w => {
+          const ex = w.examples[Math.floor(Math.random() * w.examples.length)];
+          const blanked = ex.en.replace(new RegExp(`\\b${w.word}\\b`, 'gi'), '________');
+          return { word: w.word, sentence: blanked, ko: ex.ko, correct: w.word };
+        }));
+        setCurrentIndex(0);
+        setInput('');
+        setFeedback(null);
+      }, [book.id]);
+
+      const q = questions[currentIndex];
+      if (questions.length === 0) {
+        return (
+          <div className="max-w-xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6">← Back to menu</button>
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <p className="text-lg text-slate-600">오늘 공부한 단어가 없습니다. 먼저 오늘 분량(15단어)을 공부한 뒤 퀴즈를 풀어보세요.</p>
+              <button onClick={onBack} className="mt-4 px-6 py-2 bg-slate-200 rounded-lg hover:bg-slate-300">메뉴로 돌아가기</button>
+            </div>
+          </div>
+        );
+      }
+      if (!q) {
+        return (
+          <div className="max-w-xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6">← Back to menu</button>
+            <div className="text-center text-slate-600">Loading...</div>
+          </div>
+        );
+      }
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (feedback !== null) return;
+        const correct = input.trim().toLowerCase() === q.correct.toLowerCase();
+        setFeedback(correct ? 'correct' : 'wrong');
+      };
+
+      const next = () => {
+        setInput('');
+        setFeedback(null);
+        setCurrentIndex(i => i + 1);
+      };
+
+      const progress = questions.length ? ((currentIndex + (feedback ? 1 : 0)) / questions.length) * 100 : 0;
+
+      return (
+        <div className="max-w-xl mx-auto px-4 py-6">
+          <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-4">← Back to menu</button>
+          <div className="h-2 rounded-full bg-slate-200 mb-6 overflow-hidden">
+            <div className={`h-full rounded-full bg-gradient-to-r ${book.gradient} transition-all duration-300`} style={{ width: `${progress}%` }} />
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-8">
+            <p className="text-slate-700 text-lg mb-2">{q.sentence}</p>
+            <p className="text-slate-500 text-sm mb-6">{q.ko}</p>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                disabled={feedback !== null}
+                placeholder="Type the missing word"
+                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-200 outline-none disabled:bg-slate-50"
+              />
+              {feedback === null && <button type="submit" className={`py-2 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white`}>Check</button>}
+            </form>
+            {feedback && (
+              <div className={`mt-4 p-3 rounded-lg ${feedback === 'correct' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                {feedback === 'correct' ? '✓ Correct!' : `✗ Correct: ${q.correct}`}
+              </div>
+            )}
+            {feedback && currentIndex < questions.length - 1 && (
+              <button onClick={next} className="mt-4 w-full py-2 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white">Next</button>
+            )}
+            {feedback && currentIndex >= questions.length - 1 && (
+              <button onClick={onBack} className="mt-4 w-full py-2 rounded-xl font-medium bg-slate-200 text-slate-800">Back to menu</button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- MAIN APP ---
+    function App() {
+      const [view, setView] = useState('library');
+      const [book, setBook] = useState(null);
+      const [subView, setSubView] = useState(null);
+
+      const selectBook = (b) => {
+        setBook(b);
+        setView('book-menu');
+        setSubView(null);
+      };
+
+      const backToLibrary = () => {
+        setView('library');
+        setBook(null);
+        setSubView(null);
+      };
+
+      const backToBookMenu = () => {
+        setSubView(null);
+        setView('book-menu');
+      };
+
+      if (view === 'library') {
+        return <Library onSelectBook={selectBook} />;
+      }
+
+      if (view === 'book-menu' && book) {
+        return (
+          <div className="max-w-xl mx-auto px-4 py-8">
+            <button onClick={backToLibrary} className="text-slate-600 hover:text-slate-800 mb-6">← Back to library</button>
+            <div className={`rounded-2xl p-6 bg-gradient-to-br ${book.bgLight} border border-white/50 mb-6`}>
+              <h1 className="text-2xl font-bold text-slate-800">{book.title}</h1>
+              <p className="text-slate-600">{book.author} · {book.level}</p>
+            </div>
+            <div className="space-y-3">
+              <button onClick={() => { setView('study'); setSubView('study'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘 15단어 공부</button>
+              <button onClick={() => { setView('quiz-mc'); setSubView('quiz-mc'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (객관식)</button>
+              <button onClick={() => { setView('quiz-fill'); setSubView('quiz-fill'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (빈칸)</button>
+            </div>
+          </div>
+        );
+      }
+
+      if (view === 'study' && book) return <StudyMode book={book} onBack={backToBookMenu} />;
+      if (view === 'quiz-mc' && book) return <QuizMultipleChoice book={book} onBack={backToBookMenu} />;
+      if (view === 'quiz-fill' && book) return <QuizFillBlank book={book} onBack={backToBookMenu} />;
+
+      return <Library onSelectBook={selectBook} />;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
