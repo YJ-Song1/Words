@@ -603,6 +603,7 @@
               const todayDone = todayCount >= WORDS_PER_DAY;
               return (
                 <button
+                  type="button"
                   key={book.id}
                   onClick={() => onSelectBook(book)}
                   className={`text-left rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br ${book.bgLight} border border-white/50 hover:scale-[1.02] active:scale-[0.98]`}
@@ -668,12 +669,12 @@
       if (!current) {
         return (
           <div className="max-w-2xl mx-auto px-4 py-8">
-            <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6 flex items-center gap-2">← Back to menu</button>
+            <button type="button" onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-6 flex items-center gap-2">← Back to menu</button>
             <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
               <p className="text-lg text-slate-600">
                 {todayDone ? '오늘 학습을 완료했습니다. 퀴즈로 복습해 보세요!' : pool.length === 0 ? '이 책의 미학습 단어가 없습니다.' : "오늘 분량을 마쳤습니다. 잘했어요!"}
               </p>
-              <button onClick={onBack} className="mt-4 px-6 py-2 bg-slate-200 rounded-lg hover:bg-slate-300">메뉴로 돌아가기</button>
+              <button type="button" onClick={onBack} className="mt-4 px-6 py-2 bg-slate-200 rounded-lg hover:bg-slate-300">메뉴로 돌아가기</button>
             </div>
           </div>
         );
@@ -681,7 +682,7 @@
 
       return (
         <div className="max-w-2xl mx-auto px-4 py-6 pb-24">
-          <button onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-4 flex items-center gap-2">← Back to menu</button>
+          <button type="button" onClick={onBack} className="text-slate-600 hover:text-slate-800 mb-4 flex items-center gap-2">← Back to menu</button>
           <div className={`rounded-2xl shadow-xl overflow-hidden border border-slate-200 bg-gradient-to-br ${book.bgLight} ${justMarked ? 'ring-2 ring-green-400' : ''}`}>
             <div className="p-6 sm:p-8 bg-white/80 backdrop-blur">
               <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -708,7 +709,7 @@
             </div>
             <div className="p-4 bg-white/60 flex justify-between items-center">
               <span className="text-sm text-slate-600">오늘의 단어 ({index + 1} / {pool.length})</span>
-              <button onClick={handleMarkStudied} className={`px-6 py-2 rounded-xl font-medium transition-all ${justMarked ? 'bg-green-500 text-white' : `bg-gradient-to-r ${book.gradient} text-white hover:opacity-90`}`}>공부함</button>
+              <button type="button" onClick={handleMarkStudied} className={`px-6 py-2 rounded-xl font-medium transition-all ${justMarked ? 'bg-green-500 text-white' : `bg-gradient-to-r ${book.gradient} text-white hover:opacity-90`}`}>공부함</button>
             </div>
           </div>
         </div>
@@ -810,11 +811,19 @@
                 {feedback === 'correct' ? '✓ Correct!' : `✗ Correct: ${q.correct}`}
               </div>
             )}
-            {feedback && currentIndex < questions.length - 1 && (
-              <button type="button" onClick={next} className="mt-4 w-full py-3 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white hover:opacity-95 active:opacity-90 min-h-[44px]">다음 문제</button>
-            )}
-            {feedback && currentIndex >= questions.length - 1 && (
-              <button type="button" onClick={onBack} className="mt-4 w-full py-3 rounded-xl font-medium bg-slate-200 text-slate-800 hover:bg-slate-300 min-h-[44px]">메뉴로 돌아가기</button>
+            {/* 항상 보이는 다음/메뉴 버튼 영역 */}
+            {feedback && (
+              <div className="mt-6 pt-4 border-t border-slate-200 space-y-3">
+                {currentIndex < questions.length - 1 ? (
+                  <button type="button" onClick={next} className="w-full py-3 px-4 rounded-xl font-semibold bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 min-h-[48px] text-base shadow-md">
+                    다음 문제 →
+                  </button>
+                ) : (
+                  <button type="button" onClick={onBack} className="w-full py-3 px-4 rounded-xl font-semibold bg-slate-200 text-slate-800 hover:bg-slate-300 min-h-[48px] text-base">
+                    메뉴로 돌아가기
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -909,11 +918,19 @@
                 {feedback === 'correct' ? '✓ Correct!' : `✗ Correct: ${q.correct}`}
               </div>
             )}
-            {feedback && currentIndex < questions.length - 1 && (
-              <button type="button" onClick={next} className="mt-4 w-full py-3 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white hover:opacity-95 active:opacity-90 min-h-[44px]">다음 문제</button>
-            )}
-            {feedback && currentIndex >= questions.length - 1 && (
-              <button type="button" onClick={onBack} className="mt-4 w-full py-3 rounded-xl font-medium bg-slate-200 text-slate-800 hover:bg-slate-300 min-h-[44px]">메뉴로 돌아가기</button>
+            {/* 항상 보이는 다음/메뉴 버튼 영역 */}
+            {feedback && (
+              <div className="mt-6 pt-4 border-t border-slate-200 space-y-3">
+                {currentIndex < questions.length - 1 ? (
+                  <button type="button" onClick={next} className="w-full py-3 px-4 rounded-xl font-semibold bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 min-h-[48px] text-base shadow-md">
+                    다음 문제 →
+                  </button>
+                ) : (
+                  <button type="button" onClick={onBack} className="w-full py-3 px-4 rounded-xl font-semibold bg-slate-200 text-slate-800 hover:bg-slate-300 min-h-[48px] text-base">
+                    메뉴로 돌아가기
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -950,15 +967,15 @@
       if (view === 'book-menu' && book) {
         return (
           <div className="max-w-xl mx-auto px-4 py-8">
-            <button onClick={backToLibrary} className="text-slate-600 hover:text-slate-800 mb-6">← Back to library</button>
+            <button type="button" onClick={backToLibrary} className="text-slate-600 hover:text-slate-800 mb-6">← Back to library</button>
             <div className={`rounded-2xl p-6 bg-gradient-to-br ${book.bgLight} border border-white/50 mb-6`}>
               <h1 className="text-2xl font-bold text-slate-800">{book.title}</h1>
               <p className="text-slate-600">{book.author} · {book.level}</p>
             </div>
             <div className="space-y-3">
-              <button onClick={() => { setView('study'); setSubView('study'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘 10단어 공부</button>
-              <button onClick={() => { setView('quiz-mc'); setSubView('quiz-mc'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (객관식)</button>
-              <button onClick={() => { setView('quiz-fill'); setSubView('quiz-fill'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (빈칸)</button>
+              <button type="button" onClick={() => { setView('study'); setSubView('study'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘 10단어 공부</button>
+              <button type="button" onClick={() => { setView('quiz-mc'); setSubView('quiz-mc'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (객관식)</button>
+              <button type="button" onClick={() => { setView('quiz-fill'); setSubView('quiz-fill'); }} className={`w-full py-4 rounded-xl font-medium bg-gradient-to-r ${book.gradient} text-white shadow hover:opacity-90`}>오늘의 퀴즈 (빈칸)</button>
             </div>
           </div>
         );
