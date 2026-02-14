@@ -565,12 +565,30 @@
       { w: 'trend', p: '/trend/', d: 'important', k: '추세, 경향', c: 'academic', s: 'pattern, direction', a: 'exception', ex: [{ en: 'The trend in education is toward more personalized and flexible learning.', ko: '교육의 추세는 더 개인화되고 유연한 학습 쪽으로 가고 있다.', usage: '교육' }, { en: 'We need to look at the data to see if there is a clear trend over time.', ko: '시간에 따른 명확한 추세가 있는지 데이터를 봐야 한다.', usage: '데이터' }, { en: 'Social media trends change quickly, so it is hard to keep up.', ko: '소셜미디어 트렌드는 빨리 바뀌어 따라가기 어렵다.', usage: '미디어' }] }
     ];
 
-    // --- SPEECH ---
-    function speak(text, rate = 0.8) {
+    // --- SPEECH (자연스러운 영어 음성 우선) ---
+    let cachedEnglishVoice = null;
+    function getPreferredEnglishVoice() {
+      if (cachedEnglishVoice) return cachedEnglishVoice;
+      const voices = window.speechSynthesis.getVoices();
+      const en = voices.filter(v => v.lang.startsWith('en'));
+      if (en.length === 0) return null;
+      // 우선: 자연/프리미엄 계열 이름(Google, Samantha, Daniel, Karen, Microsoft 등)
+      const prefer = en.find(v => /Google|Samantha|Daniel|Karen|Microsoft|Natural|Premium|Enhanced/i.test(v.name))
+        || en.find(v => v.lang === 'en-US')
+        || en[0];
+      cachedEnglishVoice = prefer;
+      return prefer;
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => { getPreferredEnglishVoice(); };
+    }
+    function speak(text, rate = 0.9) {
       if (!window.speechSynthesis) return;
       const u = new SpeechSynthesisUtterance(text);
-      u.rate = rate;
       u.lang = 'en-US';
+      u.rate = rate;
+      const voice = getPreferredEnglishVoice();
+      if (voice) u.voice = voice;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(u);
     }
@@ -691,7 +709,7 @@
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-800 mb-2">{current.word}</h2>
               <div className="flex items-center gap-2 mb-2">
-                <button type="button" onClick={() => speak(current.word, 0.8)} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700" aria-label="Pronounce">🔊</button>
+                <button type="button" onClick={() => speak(current.word)} className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700" aria-label="Pronounce">🔊</button>
                 <span className="text-slate-500 text-sm font-mono">{current.pronunciation}</span>
               </div>
               <p className="text-xl sm:text-2xl text-slate-800 font-medium mb-4">{current.koreanMeaning}</p>
